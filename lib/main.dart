@@ -13,6 +13,7 @@ import 'features/social/views.dart';
 import 'features/walk/viewmodels.dart';
 import 'features/walk/views.dart';
 
+//안녕
 // [중요] flutterfire configure로 생성된 파일이 있다면 import 해야 함
 // import 'firebase_options.dart';
 
