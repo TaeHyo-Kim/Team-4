@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "201202530490",
-    "project_id": "team-capstone-design",
-    "storage_bucket": "team-capstone-design.firebasestorage.app"
+    "project_number": "269398467482",
+    "project_id": "team4-2252f",
+    "storage_bucket": "team4-2252f.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:201202530490:android:abb4b10ca9bb1cb894ea83",
+        "mobilesdk_app_id": "1:269398467482:android:47bab075e9c0bd98c15023",
         "android_client_info": {
           "package_name": "com.example.team4"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyD3egeS34dwN6E8WcSyeTq7-byDu5UR-_4"
+          "current_key": "AIzaSyBOUnJ6X-KKmEaHJDmq3GN3UKaOg0xwg3g"
         }
       ],
       "services": {
