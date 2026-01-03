@@ -1,11 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 // [중요] 각 기능별 모델들을 import 합니다.
-// 경로가 다르다면 본인 프로젝트 구조에 맞춰 수정해주세요.
 import '../features/auth/models.dart';
 import '../features/pet/models.dart';
 import '../features/walk/models.dart';
-import '../features/social/models.dart'; // (만약 별도 파일이 없다면 생략 가능)
+import '../features/social/models.dart';
 
 // -----------------------------------------------------------------------------
 // 1. 유저 (Auth) 리포지토리
@@ -61,7 +60,7 @@ class PetRepository {
     required String name,
     required String breed,
     required double weight,
-    DateTime? birthDate, // 선택값 처리를 위해 nullable
+    DateTime? birthDate,
     String gender = 'M',
     bool isNeutered = false,
   }) async {
@@ -74,13 +73,18 @@ class PetRepository {
       breed: breed,
       birthDate: Timestamp.fromDate(birthDate ?? DateTime.now()),
       gender: gender,
-      imageUrl: '', // 이미지는 추후 Storage 구현 시 추가
+      imageUrl: '',
       weight: weight,
       isNeutered: isNeutered,
-      isPrimary: false, // 첫 등록 로직에 따라 true/false 분기 가능
+      isPrimary: false,
     );
 
     await docRef.set(newPet.toMap());
+  }
+
+  // [추가됨] 반려동물 정보 수정 (대표 펫 설정용)
+  Future<void> updatePet(String petId, Map<String, dynamic> data) async {
+    await _db.collection('pets').doc(petId).update(data);
   }
 
   // 반려동물 삭제
@@ -115,7 +119,7 @@ class SocialRepository {
     return snapshot.docs.map((doc) => doc.id).toSet();
   }
 
-  // 팔로우 (Transaction: 안전한 동시 업데이트)
+  // 팔로우
   Future<void> followUser({required String myUid, required String targetUid}) async {
     final myRef = _db.collection('users').doc(myUid);
     final targetRef = _db.collection('users').doc(targetUid);
@@ -125,19 +129,17 @@ class SocialRepository {
 
     return _db.runTransaction((transaction) async {
       final check = await transaction.get(followRef);
-      if (check.exists) return; // 이미 팔로우 중
+      if (check.exists) return;
 
-      // 1. 서브 컬렉션 추가
       transaction.set(followRef, {'createdAt': FieldValue.serverTimestamp()});
       transaction.set(followerRef, {'createdAt': FieldValue.serverTimestamp()});
 
-      // 2. 카운트 증가
       transaction.update(myRef, {'stats.followingCount': FieldValue.increment(1)});
       transaction.update(targetRef, {'stats.followerCount': FieldValue.increment(1)});
     });
   }
 
-  // 언팔로우 (Transaction)
+  // 언팔로우
   Future<void> unfollowUser({required String myUid, required String targetUid}) async {
     final myRef = _db.collection('users').doc(myUid);
     final targetRef = _db.collection('users').doc(targetUid);
@@ -149,11 +151,9 @@ class SocialRepository {
       final check = await transaction.get(followRef);
       if (!check.exists) return;
 
-      // 1. 서브 컬렉션 삭제
       transaction.delete(followRef);
       transaction.delete(followerRef);
 
-      // 2. 카운트 감소
       transaction.update(myRef, {'stats.followingCount': FieldValue.increment(-1)});
       transaction.update(targetRef, {'stats.followerCount': FieldValue.increment(-1)});
     });
@@ -161,14 +161,13 @@ class SocialRepository {
 }
 
 // -----------------------------------------------------------------------------
-// 4. 산책 (Walk) 리포지토리 - (다음 단계 준비용)
+// 4. 산책 (Walk) 리포지토리
 // -----------------------------------------------------------------------------
 class WalkRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   // 산책 기록 저장
   Future<void> saveWalk(WalkRecordModel walk) async {
-    // ID가 없으면 자동 생성
     final docRef = walk.id == null
         ? _db.collection('walks').doc()
         : _db.collection('walks').doc(walk.id);
@@ -181,7 +180,7 @@ class WalkRepository {
     final snapshot = await _db
         .collection('walks')
         .where('userId', isEqualTo: userId)
-        .orderBy('startTime', descending: true) // 최신순
+        .orderBy('startTime', descending: true)
         .get();
 
     return snapshot.docs.map((doc) => WalkRecordModel.fromDocument(doc)).toList();

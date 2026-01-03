@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../data/repositories.dart';
 import 'models.dart';
 
@@ -14,7 +13,6 @@ class PetViewModel with ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
-  // 생성자: 뷰모델이 생성될 때 내 펫 목록을 불러옴
   PetViewModel() {
     fetchMyPets();
   }
@@ -25,16 +23,43 @@ class PetViewModel with ChangeNotifier {
     if (uid == null) return;
 
     _isLoading = true;
-    // (화면이 깜빡이는 걸 방지하기 위해 notifyListeners는 데이터 로드 후에만 호출하거나 필요시 최소화)
-
     try {
       _pets = await _repo.getPets(uid);
+
+      // 대표 반려동물이 리스트 맨 위로 오도록 정렬
+      _pets.sort((a, b) => (b.isPrimary ? 1 : 0).compareTo(a.isPrimary ? 1 : 0));
+
       notifyListeners();
     } catch (e) {
       print("펫 불러오기 실패: $e");
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  // 대표 반려동물 설정
+  Future<void> setPrimaryPet(String newPrimaryId) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      // 1. 기존 대표 반려동물 해제
+      for (var pet in _pets) {
+        if (pet.isPrimary && pet.id != newPrimaryId) {
+          await _repo.updatePet(pet.id, {'isPrimary': false});
+        }
+      }
+
+      // 2. 새로운 펫 대표 설정
+      await _repo.updatePet(newPrimaryId, {'isPrimary': true});
+
+      // 3. 목록 새로고침
+      await fetchMyPets();
+
+    } catch (e) {
+      print("대표 펫 설정 실패: $e");
+      rethrow;
     }
   }
 
@@ -54,23 +79,54 @@ class PetViewModel with ChangeNotifier {
     notifyListeners();
 
     try {
-      // 리포지토리에 넘겨주기 (현재 리포지토리 함수 파라미터에 맞춰 호출)
-      // *실제로는 PetModel을 통째로 넘기는 구조로 리포지토리를 고치면 더 좋습니다.
-      // 여기서는 기존 리포지토리 로직을 활용합니다.
       await _repo.createPet(
         userId: uid,
         name: name,
         breed: breed,
         weight: weight,
-        // (주의) 리포지토리에 birthDate, gender 등을 받는 파라미터가 없다면
-        // 리포지토리의 createPet 함수를 수정하거나, 여기서 update를 추가로 해야 합니다.
-        // 일단은 기본 로직대로 진행합니다.
+        gender: gender,
+        birthDate: birthDate,
+        isNeutered: isNeutered,
       );
 
-      // 저장 후 목록 새로고침
       await fetchMyPets();
     } catch (e) {
       print("펫 추가 실패: $e");
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // [추가됨] 펫 정보 수정하기
+  Future<void> editPet({
+    required String petId,
+    required String name,
+    required String breed,
+    required String gender,
+    required DateTime birthDate,
+    required double weight,
+    required bool isNeutered,
+  }) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // 업데이트할 데이터 맵 생성
+      final updateData = {
+        'name': name,
+        'breed': breed,
+        'gender': gender,
+        'birthDate': birthDate, // Timestamp 변환은 Model/Repo 로직에 따라 자동 처리됨을 가정하거나, Repo가 dynamic Map 처리
+        'weight': weight,
+        'isNeutered': isNeutered,
+      };
+
+      await _repo.updatePet(petId, updateData);
+      await fetchMyPets(); // 목록 갱신
+    } catch (e) {
+      print("펫 수정 실패: $e");
       rethrow;
     } finally {
       _isLoading = false;
