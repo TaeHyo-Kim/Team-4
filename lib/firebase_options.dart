@@ -47,30 +47,30 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyAIxfOvWUZYsFiEe7ACp29g_UoypChJvJg',
-    appId: '1:201202530490:ios:68a5488e5c2a4f7894ea83',
-    messagingSenderId: '201202530490',
-    projectId: 'team-capstone-design',
-    storageBucket: 'team-capstone-design.firebasestorage.app',
+    apiKey: 'AIzaSyDmoW3f1oMVFc5qbJrkxEQuwUxPzGzPL6o',
+    appId: '1:269398467482:ios:d02970ee748bad55c15023',
+    messagingSenderId: '269398467482',
+    projectId: 'team4-2252f',
+    storageBucket: 'team4-2252f.firebasestorage.app',
     iosBundleId: 'com.example.team4',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyDeHfHRHRTvBRcBLD2u8JByUJJLk_wl770',
-    appId: '1:201202530490:web:f2010319553df2e394ea83',
-    messagingSenderId: '201202530490',
-    projectId: 'team-capstone-design',
-    authDomain: 'team-capstone-design.firebaseapp.com',
-    storageBucket: 'team-capstone-design.firebasestorage.app',
-    measurementId: 'G-YPBM0TN9MV',
+    apiKey: 'AIzaSyCCebyu6dhcfOMNQbRP4Nahv2DIMHR0C8Q',
+    appId: '1:269398467482:web:29c36437e5e27b8dc15023',
+    messagingSenderId: '269398467482',
+    projectId: 'team4-2252f',
+    authDomain: 'team4-2252f.firebaseapp.com',
+    storageBucket: 'team4-2252f.firebasestorage.app',
+    measurementId: 'G-H0S558MH69',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyD3egeS34dwN6E8WcSyeTq7-byDu5UR-_4',
-    appId: '1:201202530490:android:abb4b10ca9bb1cb894ea83',
-    messagingSenderId: '201202530490',
-    projectId: 'team-capstone-design',
-    storageBucket: 'team-capstone-design.firebasestorage.app',
+    apiKey: 'AIzaSyBOUnJ6X-KKmEaHJDmq3GN3UKaOg0xwg3g',
+    appId: '1:269398467482:android:47bab075e9c0bd98c15023',
+    messagingSenderId: '269398467482',
+    projectId: 'team4-2252f',
+    storageBucket: 'team4-2252f.firebasestorage.app',
   );
 
 }

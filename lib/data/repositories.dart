@@ -1,169 +1,188 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:geoflutterfire2/geoflutterfire2.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+// [중요] 각 기능별 모델들을 import 합니다.
 import '../features/auth/models.dart';
 import '../features/pet/models.dart';
 import '../features/walk/models.dart';
-import '../features/social/models.dart'; // FollowModel import 경로 확인 필요
+import '../features/social/models.dart';
 
-// ... (UserRepository, PetRepository, WalkRepository는 기존과 동일하므로 생략)
+// -----------------------------------------------------------------------------
+// 1. 유저 (Auth) 리포지토리
+// -----------------------------------------------------------------------------
+class AuthRepository {
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-class UserRepository {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GeoFlutterFire _geo = GeoFlutterFire();
+  // [수정] 닉네임 중복 체크를 포함한 트랜잭션 저장 로직
+  Future<void> saveUserWithNicknameCheck(UserModel user) async {
+    final nicknameRef = _db.collection('usernames').doc(user.nickname);
+    final userRef = _db.collection('users').doc(user.uid);
 
-  Future<void> signUpWithTransaction({
-    required String email,
-    required String password,
-    required String nickname,
-  }) async {
-    final userRef = _firestore.collection('users');
-    final usernameRef = _firestore.collection('usernames').doc(nickname);
+    return _db.runTransaction((transaction) async {
+      // 1. 닉네임 존재 여부 확인
+      final nicknameDoc = await transaction.get(nicknameRef);
+      if (nicknameDoc.exists) {
+        throw Exception("이미 사용 중인 닉네임입니다.");
+      }
 
-    try {
-      await _firestore.runTransaction((transaction) async {
-        final usernameDoc = await transaction.get(usernameRef);
-        if (usernameDoc.exists) {
-          throw Exception("이미 존재하는 닉네임입니다.");
-        }
-        UserCredential cred = await _auth.createUserWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-        final uid = cred.user!.uid;
-        final newUser = UserModel(
-          uid: uid,
-          email: email,
-          nickname: nickname,
-          stats: UserStats(),
-          createdAt: DateTime.now(),
-        );
-        transaction.set(userRef.doc(uid), newUser.toMap());
-        transaction.set(usernameRef, {'uid': uid});
-      });
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  Future<void> updateMyLocation(double lat, double lng) async {
-    final user = _auth.currentUser;
-    if (user == null) return;
-    GeoFirePoint myLocation = _geo.point(latitude: lat, longitude: lng);
-    await _firestore.collection('users').doc(user.uid).update({
-      'position': myLocation.data,
-      'lastActiveAt': FieldValue.serverTimestamp(),
-      'isLocationPublic': true,
+      // 2. 닉네임 선점 및 유저 프로필 동시 저장
+      transaction.set(nicknameRef, {'uid': user.uid});
+      transaction.set(userRef, user.toMap());
     });
   }
 
-  Stream<List<DocumentSnapshot>> getNearbyUsersStream(double lat, double lng, double radiusInKm) {
-    GeoFirePoint center = _geo.point(latitude: lat, longitude: lng);
-    var collectionRef = _firestore.collection('users').where('isLocationPublic', isEqualTo: true);
-    return _geo.collection(collectionRef: collectionRef)
-        .within(center: center, radius: radiusInKm, field: 'position');
-  }
-
-  Future<void> blockUser(String targetUid) async {
-    final user = _auth.currentUser;
-    if (user == null) return;
-    await _firestore.collection('users').doc(user.uid).update({
-      'blockedUserIds': FieldValue.arrayUnion([targetUid])
-    });
+  // 유저 정보 가져오기
+  Future<UserModel?> getUser(String uid) async {
+    final doc = await _db.collection('users').doc(uid).get();
+    if (!doc.exists) return null;
+    return UserModel.fromDocument(doc);
   }
 }
 
+// -----------------------------------------------------------------------------
+// 2. 반려동물 (Pet) 리포지토리
+// -----------------------------------------------------------------------------
 class PetRepository {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  Future<void> addPet(PetModel pet) async {
-    await _firestore.collection('pets').add(pet.toMap());
-  }
-}
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-class WalkRepository {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  Future<void> createWalkRecord({
+  // 내 반려동물 목록 가져오기
+  Future<List<PetModel>> getPets(String userId) async {
+    final snapshot = await _db
+        .collection('pets')
+        .where('ownerId', isEqualTo: userId)
+        .get();
+
+    return snapshot.docs.map((doc) => PetModel.fromDocument(doc)).toList();
+  }
+
+  // 반려동물 등록
+  Future<void> createPet({
     required String userId,
-    required List<String> petIds,
-    required List<LatLng> path,
-    required int duration,
-    required double distance,
-    required String memo,
-    required String emoji,
-    required String visibility,
+    required String name,
+    required String breed,
+    required double weight,
+    DateTime? birthDate,
+    String gender = 'M',
+    bool isNeutered = false,
   }) async {
-    String encoded = "encoded_polyline_example";
-    GeoPoint startPoint = GeoPoint(path.first.latitude, path.first.longitude);
-    String startHash = "wydm9q";
-    final record = WalkRecordModel(
-      userId: userId,
-      petIds: petIds,
-      startTime: Timestamp.now(),
-      endTime: Timestamp.now(),
-      duration: duration,
-      distance: distance,
-      calories: distance * 50,
-      encodedPath: encoded,
-      startLocation: startPoint,
-      startGeohash: startHash,
-      memo: memo,
-      emoji: emoji,
-      visibility: visibility,
+    final docRef = _db.collection('pets').doc(); // 자동 ID 생성
+
+    final newPet = PetModel(
+      id: docRef.id,
+      ownerId: userId,
+      name: name,
+      breed: breed,
+      birthDate: Timestamp.fromDate(birthDate ?? DateTime.now()),
+      gender: gender,
+      imageUrl: '',
+      weight: weight,
+      isNeutered: isNeutered,
+      isPrimary: false,
     );
-    WriteBatch batch = _firestore.batch();
-    DocumentReference recordRef = _firestore.collection('walk_records').doc();
-    DocumentReference userRef = _firestore.collection('users').doc(userId);
-    batch.set(recordRef, record.toMap());
-    batch.update(userRef, {
-      'stats.totalWalkDistance': FieldValue.increment(distance),
-    });
-    await batch.commit();
+
+    await docRef.set(newPet.toMap());
+  }
+
+  // [추가됨] 반려동물 정보 수정 (대표 펫 설정용)
+  Future<void> updatePet(String petId, Map<String, dynamic> data) async {
+    await _db.collection('pets').doc(petId).update(data);
+  }
+
+  // 반려동물 삭제
+  Future<void> deletePet(String petId) async {
+    await _db.collection('pets').doc(petId).delete();
   }
 }
 
+// -----------------------------------------------------------------------------
+// 3. 커뮤니티 (Social) 리포지토리
+// -----------------------------------------------------------------------------
 class SocialRepository {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  // 전체 유저 목록 조회 (나 자신 제외)
+  Future<List<UserModel>> getAllUsers(String myUid) async {
+    final snapshot = await _db.collection('users').get();
+    return snapshot.docs
+        .map((doc) => UserModel.fromDocument(doc))
+        .where((user) => user.uid != myUid)
+        .toList();
+  }
+
+  // 내가 팔로우한 UID 목록 조회
+  Future<Set<String>> getMyFollowingIds(String myUid) async {
+    final snapshot = await _db
+        .collection('users')
+        .doc(myUid)
+        .collection('following')
+        .get();
+
+    return snapshot.docs.map((doc) => doc.id).toSet();
+  }
+
+  // 팔로우
   Future<void> followUser({required String myUid, required String targetUid}) async {
-    // DB 구조 유지: 'follows' 컬렉션의 문서 ID는 'followerId_followingId'
-    final String docId = '${myUid}_$targetUid';
-    final DocumentReference followRef = _firestore.collection('follows').doc(docId);
-    final DocumentReference myUserRef = _firestore.collection('users').doc(myUid);
-    final DocumentReference targetUserRef = _firestore.collection('users').doc(targetUid);
+    final myRef = _db.collection('users').doc(myUid);
+    final targetRef = _db.collection('users').doc(targetUid);
 
-    // 이미 팔로우 중인지 체크 (선택 사항이지만 카운터 꼬임 방지용)
-    final docSnapshot = await followRef.get();
-    if (docSnapshot.exists) {
-      // 이미 팔로우 중이면 아무것도 안함 (또는 예외 발생)
-      return;
-    }
+    final followRef = myRef.collection('following').doc(targetUid);
+    final followerRef = targetRef.collection('followers').doc(myUid);
 
-    // FollowModel 인스턴스 생성
-    final newFollow = FollowModel(
-      followerId: myUid,
-      followingId: targetUid,
-      createdAt: DateTime.now(),
-    );
+    return _db.runTransaction((transaction) async {
+      final check = await transaction.get(followRef);
+      if (check.exists) return;
 
-    WriteBatch batch = _firestore.batch();
+      transaction.set(followRef, {'createdAt': FieldValue.serverTimestamp()});
+      transaction.set(followerRef, {'createdAt': FieldValue.serverTimestamp()});
 
-    // 1. 팔로우 관계 생성 (Model 사용)
-    batch.set(followRef, newFollow.toMap());
-
-    // 2. 내 팔로잉 숫자 증가 (+1)
-    batch.update(myUserRef, {
-      'stats.followingCount': FieldValue.increment(1),
+      transaction.update(myRef, {'stats.followingCount': FieldValue.increment(1)});
+      transaction.update(targetRef, {'stats.followerCount': FieldValue.increment(1)});
     });
+  }
 
-    // 3. 상대방 팔로워 숫자 증가 (+1)
-    // 주의: 상대방 유저 문서가 없으면 여기서 에러가 발생하여 전체가 취소됨 (Test 코드에서 실존 유저를 넘겨야 함)
-    batch.update(targetUserRef, {
-      'stats.followerCount': FieldValue.increment(1),
+  // 언팔로우
+  Future<void> unfollowUser({required String myUid, required String targetUid}) async {
+    final myRef = _db.collection('users').doc(myUid);
+    final targetRef = _db.collection('users').doc(targetUid);
+
+    final followRef = myRef.collection('following').doc(targetUid);
+    final followerRef = targetRef.collection('followers').doc(myUid);
+
+    return _db.runTransaction((transaction) async {
+      final check = await transaction.get(followRef);
+      if (!check.exists) return;
+
+      transaction.delete(followRef);
+      transaction.delete(followerRef);
+
+      transaction.update(myRef, {'stats.followingCount': FieldValue.increment(-1)});
+      transaction.update(targetRef, {'stats.followerCount': FieldValue.increment(-1)});
     });
+  }
+}
 
-    await batch.commit();
+// -----------------------------------------------------------------------------
+// 4. 산책 (Walk) 리포지토리
+// -----------------------------------------------------------------------------
+class WalkRepository {
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  // 산책 기록 저장
+  Future<void> saveWalk(WalkRecordModel walk) async {
+    final docRef = walk.id == null
+        ? _db.collection('walks').doc()
+        : _db.collection('walks').doc(walk.id);
+
+    await docRef.set(walk.toMap());
+  }
+
+  // 내 산책 기록 불러오기
+  Future<List<WalkRecordModel>> getMyWalks(String userId) async {
+    final snapshot = await _db
+        .collection('walks')
+        .where('userId', isEqualTo: userId)
+        .orderBy('startTime', descending: true)
+        .get();
+
+    return snapshot.docs.map((doc) => WalkRecordModel.fromDocument(doc)).toList();
   }
 }
