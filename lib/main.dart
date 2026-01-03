@@ -41,6 +41,7 @@ class MyApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: '멍멍 산책', // 앱 이름
+        debugShowCheckedModeBanner: false,
         theme: ThemeData(
           primarySwatch: Colors.amber, // 앱의 메인 색상 (노랑/주황 계열)
           scaffoldBackgroundColor: Colors.white,
