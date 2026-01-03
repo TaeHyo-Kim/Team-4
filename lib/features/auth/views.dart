@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'viewmodels.dart';
+// [중요] 펫 리스트 위젯을 가져오기 위해 import 합니다.
+// (경로가 다르다면 본인 프로젝트 구조에 맞춰 수정해주세요)
+import '../pet/views.dart';
 
+// -----------------------------------------------------------------------------
+// 1. 로그인 화면
+// -----------------------------------------------------------------------------
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -10,122 +16,248 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // 입력 컨트롤러
+  final _formKey = GlobalKey<FormState>(); // 유효성 검사 키
   final _emailCtrl = TextEditingController();
   final _pwCtrl = TextEditingController();
-  final _nickCtrl = TextEditingController();
+  bool _isObscure = true; // 비밀번호 숨김 여부
 
-  // 모드 전환 (로그인 <-> 회원가입)
-  bool _isSignup = false;
-
-  @override
-  void dispose() {
-    _emailCtrl.dispose();
-    _pwCtrl.dispose();
-    _nickCtrl.dispose();
-    super.dispose();
+  void _handleLogin() async {
+    if (_formKey.currentState!.validate()) {
+      try {
+        await context.read<AuthViewModel>().login(
+          _emailCtrl.text.trim(),
+          _pwCtrl.text.trim(),
+        );
+        // 성공 시 main.dart의 StreamBuilder가 화면 전환 처리
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("로그인 실패: ${e.toString().split(']').last.trim()}")),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final authVM = context.watch<AuthViewModel>();
+    final isLoading = context.watch<AuthViewModel>().isLoading;
 
     return Scaffold(
-      backgroundColor: Colors.grey[50], // 배경색을 은은하게
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 30),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // 1. 로고 영역
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.amber.withOpacity(0.2),
-                  shape: BoxShape.circle,
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.pets, size: 80, color: Colors.amber),
+                const SizedBox(height: 20),
+                const Text(
+                  "댕댕워킹",
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
                 ),
-                child: const Icon(Icons.pets, size: 80, color: Colors.amber),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                _isSignup ? '반려동물과 함께 산책해요!' : '다시 오셨군요!',
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
-              ),
-              const SizedBox(height: 40),
+                const SizedBox(height: 40),
 
-              // 2. 입력 필드 영역
-              _buildTextField(controller: _emailCtrl, label: '이메일', icon: Icons.email, type: TextInputType.emailAddress),
-              const SizedBox(height: 16),
-              _buildTextField(controller: _pwCtrl, label: '비밀번호', icon: Icons.lock, obscure: true),
-
-              // 회원가입일 때만 닉네임 필드 보이기
-              if (_isSignup) ...[
+                // 이메일
+                TextFormField(
+                  controller: _emailCtrl,
+                  decoration: const InputDecoration(
+                    labelText: "이메일",
+                    prefixIcon: Icon(Icons.email),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) return '이메일을 입력해주세요.';
+                    if (!value.contains('@')) return '올바른 이메일 형식이 아닙니다.';
+                    return null;
+                  },
+                ),
                 const SizedBox(height: 16),
-                _buildTextField(controller: _nickCtrl, label: '닉네임 (중복 불가)', icon: Icons.person),
-              ],
 
-              const SizedBox(height: 24),
-
-              // 3. 에러 메시지 표시 영역
-              if (authVM.errorMessage != null)
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.red[50],
-                    borderRadius: BorderRadius.circular(8),
+                // 비밀번호
+                TextFormField(
+                  controller: _pwCtrl,
+                  decoration: InputDecoration(
+                    labelText: "비밀번호",
+                    prefixIcon: const Icon(Icons.lock),
+                    suffixIcon: IconButton(
+                      icon: Icon(_isObscure ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setState(() => _isObscure = !_isObscure),
+                    ),
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.error_outline, color: Colors.red, size: 20),
-                      const SizedBox(width: 10),
-                      Expanded(child: Text(authVM.errorMessage!, style: const TextStyle(color: Colors.red))),
-                    ],
-                  ),
+                  obscureText: _isObscure,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) return '비밀번호를 입력해주세요.';
+                    return null;
+                  },
                 ),
+                const SizedBox(height: 24),
 
-              // 4. 버튼 영역
-              if (authVM.isLoading)
-                const CircularProgressIndicator(color: Colors.amber)
-              else
+                // 로그인 버튼
                 SizedBox(
                   width: double.infinity,
-                  height: 52,
+                  height: 50,
                   child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.amber,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 2,
-                    ),
-                    onPressed: () => _handleAuthAction(context),
-                    child: Text(
-                      _isSignup ? '회원가입 완료' : '로그인',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
+                    onPressed: isLoading ? null : _handleLogin,
+                    child: isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text("로그인"),
                   ),
                 ),
+                const SizedBox(height: 16),
 
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SignUpScreen()),
+                    );
+                  },
+                  child: const Text("계정이 없으신가요? 회원가입"),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 2. 회원가입 화면
+// -----------------------------------------------------------------------------
+class SignUpScreen extends StatefulWidget {
+  const SignUpScreen({super.key});
+
+  @override
+  State<SignUpScreen> createState() => _SignUpScreenState();
+}
+
+class _SignUpScreenState extends State<SignUpScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _emailCtrl = TextEditingController();
+  final _pwCtrl = TextEditingController();
+  final _nickCtrl = TextEditingController();
+
+  bool _isObscure = true;
+  bool _agreedToTerms = false; // 약관 동의 상태
+
+  void _handleSignUp() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    if (!_agreedToTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("서비스 이용 약관 및 위치 정보 제공에 동의해주세요.")),
+      );
+      return;
+    }
+
+    try {
+      await context.read<AuthViewModel>().signUp(
+        _emailCtrl.text.trim(),
+        _pwCtrl.text.trim(),
+        _nickCtrl.text.trim(),
+      );
+
+      // 회원가입 성공 시 자동 로그인 되므로, 로딩 상태 해제 후 팝
+      if (mounted) {
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("가입 실패: ${e.toString().split(']').last.trim()}")),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isLoading = context.watch<AuthViewModel>().isLoading;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text("회원가입")),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              // 이메일
+              TextFormField(
+                controller: _emailCtrl,
+                decoration: const InputDecoration(
+                  labelText: "이메일",
+                  prefixIcon: Icon(Icons.email_outlined),
+                ),
+                keyboardType: TextInputType.emailAddress,
+                validator: (value) {
+                  if (value == null || !value.contains('@')) return '올바른 이메일을 입력하세요.';
+                  return null;
+                },
+              ),
               const SizedBox(height: 16),
 
-              // 5. 모드 전환 버튼
-              TextButton(
-                onPressed: () {
-                  setState(() => _isSignup = !_isSignup);
-                  context.read<AuthViewModel>().clearError(); // 화면 전환 시 에러 초기화
-                },
-                child: RichText(
-                  text: TextSpan(
-                    style: const TextStyle(color: Colors.grey),
-                    children: [
-                      TextSpan(text: _isSignup ? '이미 계정이 있으신가요? ' : '계정이 없으신가요? '),
-                      TextSpan(
-                        text: _isSignup ? '로그인' : '회원가입',
-                        style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold),
-                      ),
-                    ],
+              // 비밀번호
+              TextFormField(
+                controller: _pwCtrl,
+                decoration: InputDecoration(
+                  labelText: "비밀번호 (6자리 이상)",
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(_isObscure ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () => setState(() => _isObscure = !_isObscure),
                   ),
+                ),
+                obscureText: _isObscure,
+                validator: (value) {
+                  if (value == null || value.length < 6) return '비밀번호는 6자리 이상이어야 합니다.';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // 닉네임
+              TextFormField(
+                controller: _nickCtrl,
+                decoration: const InputDecoration(
+                  labelText: "닉네임",
+                  prefixIcon: Icon(Icons.person_outline),
+                  helperText: "다른 유저에게 표시될 이름입니다.",
+                ),
+                validator: (value) {
+                  if (value == null || value.length < 2) return '닉네임은 2글자 이상 입력해주세요.';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 24),
+
+              // 약관 동의 체크박스
+              CheckboxListTile(
+                value: _agreedToTerms,
+                onChanged: (value) {
+                  setState(() {
+                    _agreedToTerms = value ?? false;
+                  });
+                },
+                title: const Text("서비스 이용 및 위치 정보 제공 약관에 동의합니다. (필수)", style: TextStyle(fontSize: 14)),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+                activeColor: Colors.amber,
+              ),
+              const SizedBox(height: 30),
+
+              // 가입 버튼
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: isLoading ? null : _handleSignUp,
+                  child: isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text("가입하기"),
                 ),
               ),
             ],
@@ -134,58 +266,114 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
+}
 
-  // 텍스트 필드 디자인 위젯
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    bool obscure = false,
-    TextInputType type = TextInputType.text,
-  }) {
-    return TextField(
-      controller: controller,
-      obscureText: obscure,
-      keyboardType: type,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: Colors.grey),
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.grey, width: 0.5)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.amber, width: 2)),
+// -----------------------------------------------------------------------------
+// 3. 내 정보 (프로필) 화면
+// -----------------------------------------------------------------------------
+class ProfileScreen extends StatelessWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // AuthViewModel에서 현재 로그인한 유저 정보를 가져옴
+    final authVM = context.watch<AuthViewModel>();
+    final user = authVM.userModel;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text("내 정보")),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // [A] 유저 프로필 섹션
+            const SizedBox(height: 20),
+            CircleAvatar(
+              radius: 50,
+              backgroundColor: Colors.grey[300],
+              backgroundImage: user?.profileImageUrl != null
+                  ? NetworkImage(user!.profileImageUrl!)
+                  : null,
+              child: user?.profileImageUrl == null
+                  ? const Icon(Icons.person, size: 50, color: Colors.white)
+                  : null,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              user?.nickname ?? "익명 유저",
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            Text(user?.email ?? "", style: const TextStyle(color: Colors.grey)),
+
+            // 통계 (간단 요약)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildStatItem("팔로워", "${user?.stats.followerCount ?? 0}"),
+                  _buildStatItem("팔로잉", "${user?.stats.followingCount ?? 0}"),
+                  _buildStatItem("총 산책", "${user?.stats.totalWalkDistance.toStringAsFixed(1) ?? 0}km"),
+                ],
+              ),
+            ),
+
+            const Divider(thickness: 8, color: Colors.black12),
+
+            // [B] 내 강아지 리스트 섹션
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Text("내 반려동물", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 10),
+                  // 여기서 features/pet/views.dart에 정의된 위젯을 사용
+                  PetScreen(),
+                ],
+              ),
+            ),
+
+            const Divider(thickness: 8, color: Colors.black12),
+
+            // [C] 로그아웃 버튼
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text("로그아웃", style: TextStyle(color: Colors.red)),
+              onTap: () {
+                // 로그아웃 확인
+                showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text("로그아웃"),
+                      content: const Text("정말 로그아웃 하시겠습니까?"),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("취소")),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            context.read<AuthViewModel>().logout();
+                          },
+                          child: const Text("로그아웃", style: TextStyle(color: Colors.red)),
+                        )
+                      ],
+                    )
+                );
+              },
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
       ),
     );
   }
 
-  // 로그인/회원가입 버튼 클릭 시 실행 로직
-  void _handleAuthAction(BuildContext context) async {
-    final email = _emailCtrl.text.trim();
-    final pw = _pwCtrl.text.trim();
-    final nick = _nickCtrl.text.trim();
-    final vm = context.read<AuthViewModel>();
-
-    // 간단한 유효성 검사
-    if (email.isEmpty || pw.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('이메일과 비밀번호를 입력해주세요.')));
-      return;
-    }
-
-    if (_isSignup && nick.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('닉네임을 입력해주세요.')));
-      return;
-    }
-
-    // 실제 실행
-    if (_isSignup) {
-      await vm.signUp(email: email, password: pw, nickname: nick);
-      if (vm.errorMessage == null && mounted) {
-        // 회원가입 성공 시 -> 로그인 모드로 자동 전환 or 자동 로그인됨
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('회원가입 성공! 환영합니다.')));
-      }
-    } else {
-      await vm.login(email: email, password: pw);
-    }
+  // 통계 아이템 빌더 (내부 함수)
+  Widget _buildStatItem(String label, String value) {
+    return Column(
+      children: [
+        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+      ],
+    );
   }
 }
