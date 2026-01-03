@@ -13,12 +13,25 @@ import '../features/social/models.dart'; // (만약 별도 파일이 없다면 �
 class AuthRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // 유저 정보 저장 (회원가입 시)
-  Future<void> saveUser(UserModel user) async {
-    await _db.collection('users').doc(user.uid).set(user.toMap());
+  // [수정] 닉네임 중복 체크를 포함한 트랜잭션 저장 로직
+  Future<void> saveUserWithNicknameCheck(UserModel user) async {
+    final nicknameRef = _db.collection('usernames').doc(user.nickname);
+    final userRef = _db.collection('users').doc(user.uid);
+
+    return _db.runTransaction((transaction) async {
+      // 1. 닉네임 존재 여부 확인
+      final nicknameDoc = await transaction.get(nicknameRef);
+      if (nicknameDoc.exists) {
+        throw Exception("이미 사용 중인 닉네임입니다.");
+      }
+
+      // 2. 닉네임 선점 및 유저 프로필 동시 저장
+      transaction.set(nicknameRef, {'uid': user.uid});
+      transaction.set(userRef, user.toMap());
+    });
   }
 
-  // 유저 정보 가져오기 (로그인 시)
+  // 유저 정보 가져오기
   Future<UserModel?> getUser(String uid) async {
     final doc = await _db.collection('users').doc(uid).get();
     if (!doc.exists) return null;

@@ -4,23 +4,22 @@ import '../../data/repositories.dart';
 import 'models.dart';
 
 class AuthViewModel with ChangeNotifier {
-  // 통합된 Repository 사용
   final AuthRepository _repo = AuthRepository();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   User? _user;
-  User? get user => _user;
-
   UserModel? _userModel;
-  UserModel? get userModel => _userModel;
-
   bool _isLoading = false;
+  String? _errorMessage;
+
+  User? get user => _user;
+  UserModel? get userModel => _userModel;
   bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
 
   AuthViewModel() {
     _auth.authStateChanges().listen((firebaseUser) async {
       _user = firebaseUser;
-
       if (firebaseUser != null) {
         await _fetchUserProfile();
       } else {
@@ -30,80 +29,93 @@ class AuthViewModel with ChangeNotifier {
     });
   }
 
-  // [수정됨] 리포지토리의 표준 메소드(getUser) 사용
-  Future<void> _fetchUserProfile() async {
-    if (_user == null) return;
+  void clearError() {
+    _errorMessage = null;
+    notifyListeners();
+  }
 
-    try {
-      // 내 UID로 정보를 가져옴
-      _userModel = await _repo.getUser(_user!.uid);
-      notifyListeners();
-    } catch (e) {
-      print("프로필 로드 실패: $e");
+  // [중요] 영문 에러 코드를 한국어 메시지로 변환 [cite: 2025-07-25]
+  String _parseFirebaseError(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'email-already-in-use': return '이미 가입된 이메일입니다.';
+      case 'weak-password': return '비밀번호는 6자리 이상이어야 합니다.';
+      case 'invalid-email': return '유효하지 않은 이메일 형식입니다.';
+      case 'user-not-found':
+      case 'wrong-password':
+      case 'invalid-credential': return '이메일 또는 비밀번호가 틀렸습니다.';
+      case 'too-many-requests': return '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.';
+      default: return '오류가 발생했습니다: ${e.message}';
     }
   }
 
-  // 로그인
+  Future<void> _fetchUserProfile() async {
+    if (_user == null) return;
+    try {
+      _userModel = await _repo.getUser(_user!.uid);
+      notifyListeners();
+    } catch (e) {
+      debugPrint("프로필 로드 실패: $e");
+    }
+  }
+
   Future<void> login(String email, String password) async {
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
     try {
       await _auth.signInWithEmailAndPassword(email: email, password: password);
-      // 로그인 성공 시 리스너가 _fetchUserProfile 자동 실행
+    } on FirebaseAuthException catch (e) {
+      _errorMessage = _parseFirebaseError(e);
     } catch (e) {
-      rethrow;
+      _errorMessage = '로그인 중 오류가 발생했습니다.';
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  // [수정됨] 회원가입 로직 변경
-  // (ViewModel에서 Auth 계정 생성 -> Repository에 유저 정보 저장)
   Future<void> signUp(String email, String password, String nickname) async {
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
     try {
-      // 1. Firebase Auth에 계정 생성
+      // 1. Firebase Auth 계정 생성
       final userCredential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      if (userCredential.user == null) {
-        throw Exception("회원가입 실패: 유저 정보가 없습니다.");
-      }
-
       final uid = userCredential.user!.uid;
-
-      // 2. 저장할 유저 모델 생성
       final newUser = UserModel(
         uid: uid,
         email: email,
         nickname: nickname,
-        profileImageUrl: null, // 초기값 null
+        isLocationPublic: true, // [cite: 2025-09-15] true 사용
         createdAt: DateTime.now(),
-        stats: UserStats(),     // 초기 통계 0
+        stats: UserStats(),
       );
 
-      // 3. Firestore에 저장 (리포지토리 호출)
-      await _repo.saveUser(newUser);
+      // 2. 닉네임 중복 체크가 포함된 저장 로직 실행
+      try {
+        await _repo.saveUserWithNicknameCheck(newUser);
+      } catch (e) {
+        // 닉네임 중복 시 생성된 계정도 삭제 (데이터 꼬임 방지)
+        await userCredential.user?.delete();
+        rethrow;
+      }
 
-      // 4. (선택) 닉네임 등을 Firebase Auth 프로필에도 업데이트하면 좋음
       await userCredential.user!.updateDisplayName(nickname);
-
-      // 회원가입 성공 시, AuthStateChanges가 감지하여 로그인 처리됨
+    } on FirebaseAuthException catch (e) {
+      _errorMessage = _parseFirebaseError(e);
     } catch (e) {
-      // 실패하면 생성된 계정도 지워주는 롤백 로직이 있으면 좋지만,
-      // 일단은 에러를 던짐
-      rethrow;
+      // 레포지토리의 "이미 사용 중인 닉네임입니다." 예외 처리
+      _errorMessage = e.toString().replaceAll("Exception: ", "");
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  // 로그아웃
   Future<void> logout() async {
     await _auth.signOut();
     _userModel = null;
