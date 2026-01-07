@@ -1,4 +1,6 @@
+import 'dart:io'; // 파일 처리를 위해 추가
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'viewmodels.dart';
 import 'models.dart';
@@ -212,6 +214,11 @@ class _PetRegistrationScreenState extends State<PetRegistrationScreen> {
   // 1. 폼 상태 관리를 위한 키
   final _formKey = GlobalKey<FormState>();
 
+  // 이미지 관련 상태 변수
+  File? _imageFile; // 새로 선택한 이미지 파일
+  String? _existingImageUrl; // 기존 수정 모드일 때의 이미지 URL
+  final ImagePicker _picker = ImagePicker();
+
   late TextEditingController _nameCtrl;
   late TextEditingController _breedCtrl;
   late TextEditingController _weightCtrl;
@@ -238,6 +245,19 @@ class _PetRegistrationScreenState extends State<PetRegistrationScreen> {
       _nameCtrl = TextEditingController();
       _breedCtrl = TextEditingController();
       _weightCtrl = TextEditingController();
+    }
+  }
+// 이미지 선택 함수
+  Future<void> _pickImage() async {
+    final XFile? pickedFile = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80, // 용량 절약을 위한 압축
+    );
+
+    if (pickedFile != null) {
+      setState(() {
+        _imageFile = File(pickedFile.path);
+      });
     }
   }
 
@@ -268,10 +288,28 @@ class _PetRegistrationScreenState extends State<PetRegistrationScreen> {
     // 키보드 내리기
     FocusScope.of(context).unfocus();
 
+    showDialog(
+      context: context,
+      barrierDismissible: false, // 배경 터치로 닫기 방지
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Text("반려동물 정보를 저장 중..."),
+          ],
+        ),
+      ),
+    );
+
     try {
+      final petVM = context.read<PetViewModel>();
+
+      // ViewModel에 정의될 함수 호출 (이미지 파일 포함)
+
       if (_isEditMode) {
         // [수정 모드]
-        await context.read<PetViewModel>().editPet(
+        await petVM.editPet(
           petId: widget.petToEdit!.id,
           name: _nameCtrl.text.trim(), // 공백 제거
           breed: _breedCtrl.text.trim(),
@@ -279,22 +317,31 @@ class _PetRegistrationScreenState extends State<PetRegistrationScreen> {
           birthDate: _birthDate,
           weight: double.parse(_weightCtrl.text.trim()),
           isNeutered: _isNeutered,
+          imageFile: _imageFile, // 새 이미지 파일(없으면 null)
         );
       } else {
         // [등록 모드]
-        await context.read<PetViewModel>().addPet(
+        await petVM.addPet(
           name: _nameCtrl.text.trim(),
           breed: _breedCtrl.text.trim(),
           gender: _gender,
           birthDate: _birthDate,
           weight: double.parse(_weightCtrl.text.trim()),
           isNeutered: _isNeutered,
+          imageFile: _imageFile, // 필수 아님 혹은 기본 이미지 처리
         );
       }
-
-      if (mounted) Navigator.pop(context); // 화면 닫기
+// [추가] 2. 성공 시 로딩창 닫고 화면 이동
+      if (mounted) {
+        Navigator.of(context).pop(); // 로딩 다이얼로그 닫기
+        Navigator.of(context).pop(); // 등록 화면 닫기
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("작업 실패: $e")));
+      // [추가] 3. 에러 발생 시 로딩창만 닫고 메시지 표시
+      if (mounted) Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("작업 중 오류가 발생했습니다: $e"))
+      );
     }
   }
 
@@ -313,12 +360,37 @@ class _PetRegistrationScreenState extends State<PetRegistrationScreen> {
           autovalidateMode: AutovalidateMode.onUserInteraction,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+
+            children: [// [수정된 부분] 카메라 아이콘 원형을 버튼으로 변경
               Center(
-                child: Container(
-                  width: 100, height: 100,
-                  decoration: BoxDecoration(color: Colors.grey[200], shape: BoxShape.circle),
-                  child: const Icon(Icons.camera_alt, size: 40, color: Colors.grey),
+                child: GestureDetector(
+                  onTap: _pickImage,
+                  child: Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 50,
+                        backgroundColor: Colors.grey[200],
+                        // 1순위: 새로 선택한 파일, 2순위: 기존 서버 이미지, 3순위: 기본 아이콘
+                        backgroundImage: _imageFile != null
+                            ? FileImage(_imageFile!)
+                            : (_existingImageUrl != null && _existingImageUrl!.isNotEmpty
+                            ? NetworkImage(_existingImageUrl!) as ImageProvider
+                            : null),
+                        child: (_imageFile == null && (_existingImageUrl == null || _existingImageUrl!.isEmpty))
+                            ? const Icon(Icons.camera_alt, size: 40, color: Colors.grey)
+                            : null,
+                      ),
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(color: Colors.amber, shape: BoxShape.circle),
+                          child: const Icon(Icons.add, size: 20, color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 24),

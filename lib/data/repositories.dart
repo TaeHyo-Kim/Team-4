@@ -63,6 +63,7 @@ class PetRepository {
     DateTime? birthDate,
     String gender = 'M',
     bool isNeutered = false,
+    String? imageUrl, // <--- 추가: 이미지 URL을 받음
   }) async {
     final docRef = _db.collection('pets').doc(); // 자동 ID 생성
 
@@ -73,7 +74,7 @@ class PetRepository {
       breed: breed,
       birthDate: Timestamp.fromDate(birthDate ?? DateTime.now()),
       gender: gender,
-      imageUrl: '',
+      imageUrl: imageUrl ?? '', // <--- 추가: URL 저장
       weight: weight,
       isNeutered: isNeutered,
       isPrimary: false,
