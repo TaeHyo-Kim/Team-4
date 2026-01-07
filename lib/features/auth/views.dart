@@ -177,8 +177,15 @@ class ProfileScreen extends StatelessWidget {
             const SizedBox(height: 20),
             CircleAvatar(
               radius: 50, backgroundColor: Colors.grey[300],
-              backgroundImage: user?.profileImageUrl != null ? NetworkImage(user!.profileImageUrl!) : null,
-              child: user?.profileImageUrl == null ? const Icon(Icons.person, size: 50, color: Colors.white) : null,
+
+              // [수정 포인트] null 체크뿐만 아니라 빈 문자열("")인지도 함께 확인합니다.
+              backgroundImage: (user?.profileImageUrl != null && user!.profileImageUrl!.isNotEmpty)
+                  ? NetworkImage(user.profileImageUrl!)
+                  : null,
+              // [수정 포인트] 이미지가 없거나 비어있을 때만 기본 아이콘을 보여줍니다.
+              child: (user?.profileImageUrl == null || user!.profileImageUrl!.isEmpty)
+                  ? const Icon(Icons.person, size: 50, color: Colors.white)
+                  : null,
             ),
             const SizedBox(height: 16),
             Text(user?.nickname ?? "익명 유저", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),

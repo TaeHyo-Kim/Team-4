@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../data/repositories.dart';
 import 'models.dart';
+import 'dart:io';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Timestamp 사용을 위해 추가
 
 class PetViewModel with ChangeNotifier {
   final PetRepository _repo = PetRepository();
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance; // Storage 인스턴스
 
   List<PetModel> _pets = [];
   List<PetModel> get pets => _pets;
@@ -15,6 +19,33 @@ class PetViewModel with ChangeNotifier {
 
   PetViewModel() {
     fetchMyPets();
+  }
+
+  // [도움함수] 이미지 업로드 로직 (중복 제거)
+  Future<String?> _uploadPetImage(File imageFile) async {
+    try {
+      final uid = _auth.currentUser?.uid;
+      if (uid == null) return null;
+
+      // 파일명을 고유하게 생성 (시간값 + uid)
+      String fileName = "${DateTime.now().millisecondsSinceEpoch}_$uid.png";
+
+      // pets/ 폴더 안에 사용자별로 관리
+      Reference ref = _storage.ref().child('pets/$uid/$fileName');
+
+      // 실제 업로드
+      // 10초 동안 응답이 없으면 에러를 발생시킵니다.
+      UploadTask uploadTask = ref.putFile(imageFile);
+
+      // timeout을 추가하여 무한 로딩을 방지합니다.
+      TaskSnapshot snapshot = await uploadTask.timeout(const Duration(seconds: 15));
+
+      // 업로드된 이미지의 URL 반환
+      return await snapshot.ref.getDownloadURL();
+    } catch (e) {
+      print("이미지 업로드 에러: $e");
+      return null;
+    }
   }
 
   // 내 펫 목록 불러오기
@@ -54,6 +85,24 @@ class PetViewModel with ChangeNotifier {
       // 2. 새로운 펫 대표 설정
       await _repo.updatePet(newPrimaryId, {'isPrimary': true});
 
+      // -------------------------------------------------------
+      // [추가된 로직] 대표 동물의 사진을 유저 프로필에 등록
+      // -------------------------------------------------------
+      // 리스트에서 새로 선택된 펫 객체를 찾습니다.
+      final selectedPet = _pets.firstWhere((p) => p.id == newPrimaryId);
+
+      // 만약 펫에게 이미지 URL이 있다면 유저 컬렉션 업데이트
+      if (selectedPet.imageUrl.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .update({
+          'profileImageUrl': selectedPet.imageUrl, // 유저 모델의 필드명과 일치해야 함
+        });
+        print("유저 프로필 이미지가 ${selectedPet.name}의 사진으로 변경되었습니다.");
+      }
+      // -------------------------------------------------------
+
       // 3. 목록 새로고침
       await fetchMyPets();
 
@@ -71,6 +120,7 @@ class PetViewModel with ChangeNotifier {
     required DateTime birthDate,
     required double weight,
     required bool isNeutered,
+    File? imageFile, // 이미지 파일 추가 받음
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
@@ -79,6 +129,15 @@ class PetViewModel with ChangeNotifier {
     notifyListeners();
 
     try {
+      String imageUrl = "";
+
+    // 1. 이미지가 선택되었다면 업로드 먼저 수행
+    if (imageFile != null) {
+      final uploadedUrl = await _uploadPetImage(imageFile);
+      if (uploadedUrl != null) imageUrl = uploadedUrl;
+    }
+
+    // 2. DB 저장 (imageUrl 포함)
       await _repo.createPet(
         userId: uid,
         name: name,
@@ -87,6 +146,7 @@ class PetViewModel with ChangeNotifier {
         gender: gender,
         birthDate: birthDate,
         isNeutered: isNeutered,
+        imageUrl: imageUrl, // Repository가 이 인자를 받도록 구현되어 있어야 함
       );
 
       await fetchMyPets();
@@ -108,6 +168,7 @@ class PetViewModel with ChangeNotifier {
     required DateTime birthDate,
     required double weight,
     required bool isNeutered,
+    File? imageFile, // 이미지 파일 추가 받음
   }) async {
     _isLoading = true;
     notifyListeners();
@@ -122,6 +183,14 @@ class PetViewModel with ChangeNotifier {
         'weight': weight,
         'isNeutered': isNeutered,
       };
+
+      // 새 이미지가 선택된 경우에만 업로드 후 URL 업데이트
+      if (imageFile != null) {
+        final uploadedUrl = await _uploadPetImage(imageFile);
+        if (uploadedUrl != null) {
+          updateData['imageUrl'] = uploadedUrl;
+        }
+      }
 
       await _repo.updatePet(petId, updateData);
       await fetchMyPets(); // 목록 갱신
