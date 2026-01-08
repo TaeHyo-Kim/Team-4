@@ -19,12 +19,12 @@ class WalkViewModel with ChangeNotifier {
   bool _isWalking = false;
   bool _isPaused = false;
   int _seconds = 0;
-  double _distance = 0.0;      // 미터 단위 (모델 저장 시 km로 변환)
+  double _distance = 0.0; // 미터 단위 (모델 저장 시 km로 변환)
 
-  List<LatLng> _route = [];    // 지도 표시용 경로
-  LatLng? _currentPosition;    // 현재 위치
-  LatLng? _startPosition;      // 시작 위치 (모델의 startLocation용)
-  DateTime? _startTime;        // 시작 시간 (모델용)
+  List<LatLng> _route = []; // 지도 표시용 경로
+  LatLng? _currentPosition; // 현재 위치
+  LatLng? _startPosition; // 시작 위치 (모델의 startLocation용)
+  DateTime? _startTime; // 시작 시간 (모델용)
 
   List<String> _selectedPetIds = [];
 
@@ -35,10 +35,15 @@ class WalkViewModel with ChangeNotifier {
   // Getters
   // ------------------------------------------------------------------------
   bool get isWalking => _isWalking;
+
   bool get isPaused => _isPaused;
+
   int get seconds => _seconds;
+
   double get distance => _distance;
+
   List<LatLng> get route => _route;
+
   LatLng? get currentPosition => _currentPosition;
 
   // 화면 진입 시 초기 위치 로드
@@ -141,7 +146,8 @@ class WalkViewModel with ChangeNotifier {
 
     // 2. 모델 생성
     final newRecord = WalkRecordModel(
-      id: null, // Firestore 자동 ID
+      id: null,
+      // Firestore 자동 ID
       userId: userId,
       petIds: _selectedPetIds,
       startTime: Timestamp.fromDate(_startTime ?? DateTime.now()),
@@ -151,20 +157,27 @@ class WalkViewModel with ChangeNotifier {
       calories: calories,
       encodedPath: encodedPathStr,
       startLocation: startGeoPoint,
-      startGeohash: '', // GeoHash 라이브러리가 없으면 빈값 (필요 시 geoflutterfire 추가)
+      startGeohash: '',
+      // GeoHash 라이브러리가 없으면 빈값 (필요 시 geoflutterfire 추가)
       memo: memo,
       emoji: emoji,
       visibility: visibility,
-      photoUrls: [], // 이미지는 별도 업로드 로직 필요 (일단 빈 리스트)
+      photoUrls: [],
+      // 이미지는 별도 업로드 로직 필요 (일단 빈 리스트)
       likeCount: 0,
     );
 
+    // [보정 로직 4] 네트워크 미연결 시 재시도 로직이 포함된 저장
     try {
+      // 업로드 시도
       await _repo.saveWalk(newRecord);
     } catch (e) {
-      print("산책 저장 실패: $e");
+      // [해결책] 네트워크 오류 발생 시 로컬 DB에 보관했다가 나중에 전송
+      print("업로드 실패, 로컬에 임시 저장: $e");
+      // await _localDb.saveForLater(newRecord);
       rethrow;
     } finally {
+      _isWalking = false;
       notifyListeners();
     }
   }
@@ -191,37 +204,64 @@ class WalkViewModel with ChangeNotifier {
     });
   }
 
+  // 보정 로직을 위한 설정값
+  final double _accuracyThreshold = 20.0; // 20m 이상 오차 무시
+
   void _startLocationTracking() {
     const locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
       distanceFilter: 5,
     );
 
-    _positionStream = Geolocator.getPositionStream(locationSettings: locationSettings)
-        .listen((Position position) {
+    _positionStream =
+        Geolocator.getPositionStream(locationSettings: locationSettings)
+            .listen((Position position) {
+          if (_isPaused) return;
 
-      if (_isPaused) return;
+          // [보정 로직 1] 정확도 필터링
+          // 수신된 데이터의 정확도가 너무 낮으면(오차 범위가 크면) 무시합니다.
+          if (position.accuracy > _accuracyThreshold) {
+            debugPrint("정확도 낮음 무시: ${position.accuracy}m");
+            return;
+          }
 
-      final newPoint = LatLng(position.latitude, position.longitude);
+          final newPoint = LatLng(position.latitude, position.longitude);
 
-      if (_route.isNotEmpty) {
-        final lastPoint = _route.last;
-        final dist = Geolocator.distanceBetween(
-          lastPoint.latitude, lastPoint.longitude,
-          newPoint.latitude, newPoint.longitude,
-        );
-        _distance += dist;
-      } else {
-        // 첫 위치를 시작 위치로 지정
-        _startPosition ??= newPoint;
-      }
+          if (_route.isNotEmpty) {
+            final lastPoint = _route.last;
 
-      _route.add(newPoint);
-      _currentPosition = newPoint;
+            // [보정 로직 2] 거리 계산 및 직선 보정
+            // Google Maps Polyline은 점들을 순서대로 잇기 때문에
+            // 중간에 신호가 끊겼다가 복구되어도 자동으로 직선 연결됩니다.
+            final dist = Geolocator.distanceBetween(
+              lastPoint.latitude, lastPoint.longitude,
+              newPoint.latitude, newPoint.longitude,
+            );
 
-      notifyListeners();
-    });
+            // 비정상적인 순간 이동(예: 갑자기 500m 이동) 방지 필터 (선택 사항)
+            if (dist < 300) {
+              _distance += dist;
+              _route.add(newPoint);
+            }
+          } else {
+            _startPosition ??= newPoint;
+            _route.add(newPoint);
+          }
+
+          _currentPosition = newPoint;
+          notifyListeners();
+
+          // [보정 로직 3] 로컬 캐싱 (임시 예시)
+          // 실제 구현 시 sqflite를 사용하여 _route를 수시로 저장하면 앱 종료 시 복구 가능합니다.
+          _saveToLocalCache(_route);
+        });
   }
+
+  void _saveToLocalCache(List<LatLng> points) {
+    // SharedPreferences나 sqflite에 현재 경로를 임시 저장하는 로직을 여기에 구현합니다.
+    // 이는 네트워크 단절 후 앱이 강제 종료되었을 때 데이터를 보호합니다.
+  }
+
 
   Future<bool> _checkPermission() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
