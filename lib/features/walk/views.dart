@@ -159,7 +159,8 @@ class _WalkScreenState extends State<WalkScreen> {
                     children: [
                       CircularProgressIndicator(color: Colors.white),
                       SizedBox(height: 10),
-                      Text("위치를 찾는 중...", style: TextStyle(color: Colors.white)),
+                      Text(
+                          "위치를 찾는 중...", style: TextStyle(color: Colors.white)),
                     ],
                   ),
                 ),
@@ -183,45 +184,72 @@ class _WalkScreenState extends State<WalkScreen> {
       ),
       body: Stack(
         children: [
-          // [1] 지도 (배경)
-          _buildGoogleMap(vm),
 
-          // [2] 정보 카드 (상단)
+          // [1] 지도 영역 (터치 감지)
+          Listener(
+            onPointerDown: (_) => vm.onUserInteractionStarted(),
+            onPointerUp: (_) => vm.onUserInteractionEnded(),
+            child: _buildGoogleMap(vm),
+          ),
+
+          // [2] 초기 화면 오버레이 (산책 중이 아닐 때)
+          if (!vm.isWalking) _buildInitialOverlay(vm),
+
+          // [3] 산책 중 상단 정보 카드
+          if (vm.isWalking)
+            Positioned(
+              top: 20,
+              left: 20,
+              right: 20,
+              child: WalkInfoCard(
+                  seconds: vm.seconds, distanceMeters: vm.distance),
+            ),
+
+          // [4] 내 위치 버튼 (우측 하단)
           Positioned(
-            top: 20,
-            left: 20,
+            bottom: vm.isWalking ? 120 : 40,
             right: 20,
-            child: WalkInfoCard(
-              seconds: vm.seconds,
-              distanceMeters: vm.distance,
+            child: FloatingActionButton(
+              mini: true,
+              backgroundColor: Colors.white,
+              onPressed: () => vm.moveToCurrentLocation(),
+              child: const Icon(Icons.my_location, color: Color(0xFFFF9800)),
             ),
           ),
 
-          // [3] 컨트롤 패널 (하단)
-          Positioned(
-            bottom: 40,
-            left: 0,
-            right: 0,
-            child: WalkControls(
-              isWalking: vm.isWalking,
-              isPaused: vm.isPaused,
-              distanceMeters: vm.distance,
-              seconds: vm.seconds,
-              onStart: () async {
-                try {
-                  await vm.startWalk(['pet_dummy_id']);
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("시작 실패: $e")),
-                    );
-                  }
-                }
-              },
-              onPauseToggle: vm.togglePause,
-              onStop: () => _showStopDialog(context, vm),
+          // [5] 하단 컨트롤 패널
+          if (vm.isWalking)
+            Positioned(
+              bottom: 40,
+              left: 0,
+              right: 0,
+              child: WalkControls(
+                isWalking: vm.isWalking,
+                isPaused: vm.isPaused,
+                distanceMeters: vm.distance,
+                seconds: vm.seconds,
+                onPauseToggle: vm.togglePause,
+                onStop: () => _showStopDialog(context, vm),
+                onStart: () {}, // 무시
+              ),
             ),
-          ),
+
+          // [6] 로딩 화면
+          if (vm.currentPosition == null)
+            Container(
+              color: Colors.black54,
+              child: const Center(
+                child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(color: Colors.white),
+                      SizedBox(height: 10),
+                      Text(
+                          "위치를 찾는 중...", style: TextStyle(color: Colors.white)),
+                    ]
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -234,27 +262,51 @@ class _WalkScreenState extends State<WalkScreen> {
     return GoogleMap(
       initialCameraPosition: CameraPosition(
         target: vm.currentPosition!,
-        zoom: 17,
+        zoom: 15.0,
       ),
       myLocationEnabled: true,
       myLocationButtonEnabled: false,
       zoomControlsEnabled: false,
       polylines: {
-        Polyline(
-          polylineId: const PolylineId("route"),
+        Polyline(polylineId: const PolylineId("route"),
           points: vm.route,
-          color: Colors.blueAccent,
-          width: 5,
+          color: const Color(0xFFFF9800),
+          width: 6,
           jointType: JointType.round,
-          startCap: Cap.roundCap,
-          endCap: Cap.roundCap,
         ),
       },
-      onMapCreated: (controller) {
-        if (!_mapController.isCompleted) {
-          _mapController.complete(controller);
-        }
-      },
+      // [수정] 컨트롤러를 ViewModel에 전달합니다.
+      onMapCreated: (controller) => vm.setMapController(controller),
+    );
+  }
+
+  Widget _buildInitialOverlay(WalkViewModel vm) {
+    return Positioned.fill(
+      child: Container(
+        color: Colors.white.withOpacity(0.9),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text("오늘도 즐거운 산책 해보아용 >.<", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 60),
+            GestureDetector(
+              onTap: () => vm.startWalk(['pet_dummy_id']),
+              child: Container(
+                width: 180, height: 180,
+                decoration: const BoxDecoration(color: Color(0xFFFF9800), shape: BoxShape.circle),
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.pets, size: 50, color: Colors.white),
+                    Text("START", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                  ],
+                ),
+              ),
+            ),
+            // ... 최근 산책 기록 위젯 유지 ...
+          ],
+        ),
+      ),
     );
   }
 
