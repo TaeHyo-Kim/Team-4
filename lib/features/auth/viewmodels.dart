@@ -116,6 +116,23 @@ class AuthViewModel with ChangeNotifier {
     }
   }
 
+  // 비밀번호 재설정 이메일 전송
+  Future<void> sendPasswordResetEmail(String email) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (e) {
+      _errorMessage = _parseFirebaseError(e);
+    } catch (e) {
+      _errorMessage = '이메일 전송 중 오류가 발생했습니다.';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> logout() async {
     await _auth.signOut();
     _userModel = null;

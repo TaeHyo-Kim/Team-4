@@ -108,6 +108,9 @@ class _WalkScreenState extends State<WalkScreen> {
           points: vm.route,
           color: Colors.blueAccent,
           width: 5,
+          jointType: JointType.round,
+          startCap: Cap.roundCap,
+          endCap: Cap.roundCap,
         ),
       },
       onMapCreated: (controller) {
