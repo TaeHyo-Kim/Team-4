@@ -5,7 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Timestamp, GeoPoint용
-
+import '../../data/database_helper.dart';
 import '../../data/repositories.dart';
 import 'models.dart';
 
@@ -16,6 +16,13 @@ class WalkViewModel with ChangeNotifier {
   // ------------------------------------------------------------------------
   // 상태 변수들
   // ------------------------------------------------------------------------
+
+// 카메라 제어용
+  GoogleMapController? _mapController;
+  Timer? _inactivityTimer;
+  bool _isUserInteracting = false;
+  final double _defaultZoom = 15.0; // 1:25,000 배율 수준
+
   bool _isWalking = false;
   bool _isPaused = false;
   int _seconds = 0;
@@ -27,7 +34,6 @@ class WalkViewModel with ChangeNotifier {
   DateTime? _startTime; // 시작 시간 (모델용)
 
   List<String> _selectedPetIds = [];
-
   StreamSubscription<Position>? _positionStream;
   Timer? _timer;
 
@@ -35,16 +41,50 @@ class WalkViewModel with ChangeNotifier {
   // Getters
   // ------------------------------------------------------------------------
   bool get isWalking => _isWalking;
-
   bool get isPaused => _isPaused;
-
   int get seconds => _seconds;
-
   double get distance => _distance;
-
   List<LatLng> get route => _route;
-
   LatLng? get currentPosition => _currentPosition;
+  bool get isUserInteracting => _isUserInteracting;
+
+  void setMapController(GoogleMapController controller) {
+    _mapController = controller;
+    if (_currentPosition != null) {
+      moveToCurrentLocation();
+    }
+  }
+
+  // 사용자가 지도를 터치했을 때 호출
+  void onUserInteractionStarted() {
+    _isUserInteracting = true;
+    _inactivityTimer?.cancel();
+    notifyListeners();
+  }
+
+  // 사용자가 터치를 뗐을 때 호출 (10초 카운트다운 시작)
+  void onUserInteractionEnded() {
+    _inactivityTimer?.cancel();
+    _inactivityTimer = Timer(const Duration(seconds: 10), () {
+      _isUserInteracting = false;
+      moveToCurrentLocation();
+      notifyListeners();
+    });
+  }
+
+  // 현재 위치로 카메라 이동 (배율 15.0 고정)
+  Future<void> moveToCurrentLocation() async {
+    if (_currentPosition != null && _mapController != null) {
+      await _mapController!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: _currentPosition!,
+            zoom: _defaultZoom,
+          ),
+        ),
+      );
+    }
+  }
 
   // 화면 진입 시 초기 위치 로드
   Future<void> fetchCurrentLocation() async {
@@ -53,9 +93,10 @@ class WalkViewModel with ChangeNotifier {
         desiredAccuracy: LocationAccuracy.high,
       );
       _currentPosition = LatLng(position.latitude, position.longitude);
+      moveToCurrentLocation();
       notifyListeners();
     } catch (e) {
-      print("위치 가져오기 실패: $e");
+      debugPrint("위치 가져오기 실패: $e");
     }
   }
 
@@ -64,7 +105,6 @@ class WalkViewModel with ChangeNotifier {
   // ------------------------------------------------------------------------
   Future<void> startWalk(List<String> petIds) async {
     if (_isWalking) return;
-
     bool hasPermission = await _checkPermission();
     if (!hasPermission) throw Exception("위치 권한이 필요합니다.");
 
@@ -89,24 +129,51 @@ class WalkViewModel with ChangeNotifier {
 
     _startTimer();
     _startLocationTracking();
-
+    moveToCurrentLocation(); // 시작 시 중심 맞춤
     notifyListeners();
   }
 
-  // ------------------------------------------------------------------------
-  // 2. 일시정지 / 재개
-  // ------------------------------------------------------------------------
-  void togglePause() {
-    if (!_isWalking) return;
-    _isPaused = !_isPaused;
 
-    if (_isPaused) {
-      _timer?.cancel();
-    } else {
-      _startTimer();
-    }
-    notifyListeners();
+  void _startLocationTracking() {
+    const locationSettings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 5,
+    );
+
+    _positionStream = Geolocator.getPositionStream(locationSettings: locationSettings)
+        .listen((Position position) async {
+      if (_isPaused) return;
+      if (position.accuracy > _accuracyThreshold) return;
+
+      final newPoint = LatLng(position.latitude, position.longitude);
+
+      // [추가] 로컬 DB에 즉시 저장
+      await WalkDbHelper.instance.insertPoint(newPoint.latitude, newPoint.longitude);
+
+      if (_route.isNotEmpty) {
+        final lastPoint = _route.last;
+        final dist = Geolocator.distanceBetween(
+          lastPoint.latitude, lastPoint.longitude,
+          newPoint.latitude, newPoint.longitude,
+        );
+        if (dist < 300) {
+          _distance += dist;
+          _route.add(newPoint);
+        }
+      } else {
+        _startPosition ??= newPoint;
+        _route.add(newPoint);
+      }
+
+      _currentPosition = newPoint;
+
+      // 사용자가 조작 중이 아닐 때만 카메라 자동 추적
+      if (!_isUserInteracting) moveToCurrentLocation();
+      notifyListeners();
+    });
   }
+
+  // 2. 일시정지 / 재개 - 삭제
 
   // ------------------------------------------------------------------------
   // 3. 산책 종료 및 저장 (모델 구조에 맞춤)
@@ -169,14 +236,17 @@ class WalkViewModel with ChangeNotifier {
 
     // [보정 로직 4] 네트워크 미연결 시 재시도 로직이 포함된 저장
     try {
-      // 업로드 시도
+      // 1. 서버 업로드 시도
       await _repo.saveWalk(newRecord);
+      // 2. 서버 저장 성공 시 로컬 캐시 삭제
+      await WalkDbHelper.instance.clearCache();
     } catch (e) {
-      // [해결책] 네트워크 오류 발생 시 로컬 DB에 보관했다가 나중에 전송
-      print("업로드 실패, 로컬에 임시 저장: $e");
-      // await _localDb.saveForLater(newRecord);
+      // 실패 시 로컬 DB에 데이터가 남아있으므로, 나중에 재시도 로직 구현 가능
+      debugPrint("업로드 실패, 로컬 DB에 좌표 보존됨: $e");
       rethrow;
     } finally {
+      _positionStream?.cancel();
+      _timer?.cancel();
       _isWalking = false;
       notifyListeners();
     }
@@ -207,73 +277,29 @@ class WalkViewModel with ChangeNotifier {
   // 보정 로직을 위한 설정값
   final double _accuracyThreshold = 20.0; // 20m 이상 오차 무시
 
-  void _startLocationTracking() {
-    const locationSettings = LocationSettings(
-      accuracy: LocationAccuracy.high,
-      distanceFilter: 5,
-    );
-
-    _positionStream =
-        Geolocator.getPositionStream(locationSettings: locationSettings)
-            .listen((Position position) {
-          if (_isPaused) return;
-
-          // [보정 로직 1] 정확도 필터링
-          // 수신된 데이터의 정확도가 너무 낮으면(오차 범위가 크면) 무시합니다.
-          if (position.accuracy > _accuracyThreshold) {
-            debugPrint("정확도 낮음 무시: ${position.accuracy}m");
-            return;
-          }
-
-          final newPoint = LatLng(position.latitude, position.longitude);
-
-          if (_route.isNotEmpty) {
-            final lastPoint = _route.last;
-
-            // [보정 로직 2] 거리 계산 및 직선 보정
-            // Google Maps Polyline은 점들을 순서대로 잇기 때문에
-            // 중간에 신호가 끊겼다가 복구되어도 자동으로 직선 연결됩니다.
-            final dist = Geolocator.distanceBetween(
-              lastPoint.latitude, lastPoint.longitude,
-              newPoint.latitude, newPoint.longitude,
-            );
-
-            // 비정상적인 순간 이동(예: 갑자기 500m 이동) 방지 필터 (선택 사항)
-            if (dist < 300) {
-              _distance += dist;
-              _route.add(newPoint);
-            }
-          } else {
-            _startPosition ??= newPoint;
-            _route.add(newPoint);
-          }
-
-          _currentPosition = newPoint;
-          notifyListeners();
-
-          // [보정 로직 3] 로컬 캐싱 (임시 예시)
-          // 실제 구현 시 sqflite를 사용하여 _route를 수시로 저장하면 앱 종료 시 복구 가능합니다.
-          _saveToLocalCache(_route);
-        });
-  }
-
   void _saveToLocalCache(List<LatLng> points) {
     // SharedPreferences나 sqflite에 현재 경로를 임시 저장하는 로직을 여기에 구현합니다.
     // 이는 네트워크 단절 후 앱이 강제 종료되었을 때 데이터를 보호합니다.
   }
 
 
+  @override
+  void dispose() {
+    _inactivityTimer?.cancel();
+    _positionStream?.cancel();
+    _timer?.cancel();
+    super.dispose();
+  }
+
   Future<bool> _checkPermission() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return false;
-
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) return false;
     }
-    if (permission == LocationPermission.deniedForever) return false;
-
-    return true;
+    return permission != LocationPermission.deniedForever;
   }
+
 }

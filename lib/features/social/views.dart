@@ -35,14 +35,15 @@ class _SocialScreenState extends State<SocialScreen> {
     final socialVM = context.watch<SocialViewModel>();
 
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("친구 찾기"),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => context.read<SocialViewModel>().fetchUsers(),
-          ),
-        ],
+        backgroundColor: const Color(0xFF4CAF50),
+        title: const Text(
+          "검색",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Column(
         children: [

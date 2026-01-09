@@ -29,59 +29,222 @@ class _WalkScreenState extends State<WalkScreen> {
   Widget build(BuildContext context) {
     final vm = context.watch<WalkViewModel>();
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          // [1] 지도 (배경)
-          _buildGoogleMap(vm),
+    // 산책 중이 아닐 때 (초기 화면)
+    if (!vm.isWalking) {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF4CAF50),
+          title: const Text(
+            "산책",
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          elevation: 0,
+          iconTheme: const IconThemeData(color: Colors.white),
+        ),
+        body: Stack(
+          children: [
+            // [1] 지도 (배경, 투명도 조정)
+            _buildGoogleMap(vm),
 
-          // [2] 정보 카드 (상단)
-          if (vm.isWalking)
-            Positioned(
-              top: 50,
-              left: 20,
-              right: 20,
-              child: WalkInfoCard(
-                seconds: vm.seconds,
-                distanceMeters: vm.distance,
+            // [2] 메인 컨텐츠
+            Positioned.fill(
+              child: Container(
+                color: Colors.white.withOpacity(0.95),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 40),
+                    // 인사 문구
+                    const Text(
+                      "오늘도 즐거운 산책 해보아용 >.<",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 60),
+                    // START 버튼 (오렌지색 원형)
+                    GestureDetector(
+                      onTap: () async {
+                        try {
+                          await vm.startWalk(['pet_dummy_id']);
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text("시작 실패: $e")),
+                            );
+                          }
+                        }
+                      },
+                      child: Container(
+                        width: 200,
+                        height: 200,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF9800),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFFF9800).withOpacity(0.3),
+                              blurRadius: 20,
+                              spreadRadius: 5,
+                            ),
+                          ],
+                        ),
+                        child: const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.pets,
+                              size: 60,
+                              color: Colors.white,
+                            ),
+                            SizedBox(height: 10),
+                            Text(
+                              "START",
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 80),
+                    // 최근 산책 기록
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      margin: const EdgeInsets.symmetric(horizontal: 24),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "최근 산책 기록",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            "어제 : 45분, 3.2km",
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
 
-          // [3] 컨트롤 패널 (하단)
+            // [3] 로딩 중 (위치 못 잡음)
+            if (vm.currentPosition == null)
+              Container(
+                color: Colors.black54,
+                child: const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(color: Colors.white),
+                      SizedBox(height: 10),
+                      Text("위치를 찾는 중...", style: TextStyle(color: Colors.white)),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    // 산책 중일 때
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF4CAF50),
+        title: const Text(
+          "산책",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Stack(
+        children: [
+
+          // [1] 지도 영역 (터치 감지)
+          Listener(
+            onPointerDown: (_) => vm.onUserInteractionStarted(),
+            onPointerUp: (_) => vm.onUserInteractionEnded(),
+            child: _buildGoogleMap(vm),
+          ),
+
+          // [2] 초기 화면 오버레이 (산책 중이 아닐 때)
+          if (!vm.isWalking) _buildInitialOverlay(vm),
+
+          // [3] 산책 중 상단 정보 카드
+          if (vm.isWalking)
+            Positioned(
+              top: 20,
+              left: 20,
+              right: 20,
+              child: WalkInfoCard(
+                  seconds: vm.seconds, distanceMeters: vm.distance),
+            ),
+
+          // [4] 내 위치 버튼 (우측 하단)
           Positioned(
-            bottom: 40,
-            left: 0,
-            right: 0,
-            child: WalkControls(
-              isWalking: vm.isWalking,
-              isPaused: vm.isPaused,
-              onStart: () async {
-                try {
-                  // TODO: 실제로는 펫 선택 화면에서 ID를 받아와야 함
-                  await vm.startWalk(['pet_dummy_id']);
-                } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("시작 실패: $e")),
-                  );
-                }
-              },
-              onPauseToggle: vm.togglePause,
-              onStop: () => _showStopDialog(context, vm),
+            bottom: vm.isWalking ? 120 : 40,
+            right: 20,
+            child: FloatingActionButton(
+              mini: true,
+              backgroundColor: Colors.white,
+              onPressed: () => vm.moveToCurrentLocation(),
+              child: const Icon(Icons.my_location, color: Color(0xFFFF9800)),
             ),
           ),
 
-          // [4] 로딩 중 (위치 못 잡음)
+          // [5] 하단 컨트롤 패널
+          if (vm.isWalking)
+            Positioned(
+              bottom: 40,
+              left: 0,
+              right: 0,
+              child: WalkControls(
+                isWalking: vm.isWalking,
+                isPaused: vm.isPaused,
+                distanceMeters: vm.distance,
+                seconds: vm.seconds,
+                onStop: () => _showStopDialog(context, vm),
+                onStart: () {}, // 무시
+              ),
+            ),
+
+          // [6] 로딩 화면
           if (vm.currentPosition == null)
             Container(
               color: Colors.black54,
               child: const Center(
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(color: Colors.white),
-                    SizedBox(height: 10),
-                    Text("위치를 찾는 중...", style: TextStyle(color: Colors.white)),
-                  ],
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(color: Colors.white),
+                      SizedBox(height: 10),
+                      Text(
+                          "위치를 찾는 중...", style: TextStyle(color: Colors.white)),
+                    ]
                 ),
               ),
             ),
@@ -97,27 +260,51 @@ class _WalkScreenState extends State<WalkScreen> {
     return GoogleMap(
       initialCameraPosition: CameraPosition(
         target: vm.currentPosition!,
-        zoom: 17,
+        zoom: 15.0,
       ),
       myLocationEnabled: true,
       myLocationButtonEnabled: false,
       zoomControlsEnabled: false,
       polylines: {
-        Polyline(
-          polylineId: const PolylineId("route"),
+        Polyline(polylineId: const PolylineId("route"),
           points: vm.route,
-          color: Colors.blueAccent,
-          width: 5,
+          color: const Color(0xFFFF9800),
+          width: 6,
           jointType: JointType.round,
-          startCap: Cap.roundCap,
-          endCap: Cap.roundCap,
         ),
       },
-      onMapCreated: (controller) {
-        if (!_mapController.isCompleted) {
-          _mapController.complete(controller);
-        }
-      },
+      // [수정] 컨트롤러를 ViewModel에 전달합니다.
+      onMapCreated: (controller) => vm.setMapController(controller),
+    );
+  }
+
+  Widget _buildInitialOverlay(WalkViewModel vm) {
+    return Positioned.fill(
+      child: Container(
+        color: Colors.white.withOpacity(0.9),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text("오늘도 즐거운 산책 해보아용 >.<", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 60),
+            GestureDetector(
+              onTap: () => vm.startWalk(['pet_dummy_id']),
+              child: Container(
+                width: 180, height: 180,
+                decoration: const BoxDecoration(color: Color(0xFFFF9800), shape: BoxShape.circle),
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.pets, size: 50, color: Colors.white),
+                    Text("START", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                  ],
+                ),
+              ),
+            ),
+            // ... 최근 산책 기록 위젯 유지 ...
+          ],
+        ),
+      ),
     );
   }
 
@@ -140,8 +327,16 @@ class _WalkScreenState extends State<WalkScreen> {
               );
             }
           } catch (e) {
+            // [수정] 에러 메시지를 구체적으로 표시 (permission-denied 등)
+            String errorMsg = e.toString();
+            if (errorMsg.contains("permission-denied")) {
+              errorMsg = "서버 권한이 거부되었습니다. 관리자에게 문의하세요.";
+            }
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("저장 실패: $e")),
+              SnackBar(
+                content: Text("저장 실패: $errorMsg"),
+                backgroundColor: Colors.red,
+              ),
             );
           }
         },
@@ -169,12 +364,12 @@ class WalkInfoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final minutes = (seconds ~/ 60).toString().padLeft(2, '0');
     final sec = (seconds % 60).toString().padLeft(2, '0');
-    final km = (distanceMeters / 1000).toStringAsFixed(2);
+    final km = (distanceMeters / 1000).toStringAsFixed(1);
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.95),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -199,8 +394,9 @@ class WalkInfoCard extends StatelessWidget {
     return Column(
       children: [
         Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 20, color: Colors.amber),
+            Icon(icon, size: 20, color: const Color(0xFFFF9800)),
             const SizedBox(width: 5),
             Text(
               value,
@@ -208,6 +404,7 @@ class WalkInfoCard extends StatelessWidget {
             ),
           ],
         ),
+        const SizedBox(height: 4),
         Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
       ],
     );
@@ -218,59 +415,76 @@ class WalkInfoCard extends StatelessWidget {
 class WalkControls extends StatelessWidget {
   final bool isWalking;
   final bool isPaused;
+  final double distanceMeters;
+  final int seconds;
   final VoidCallback onStart;
-  final VoidCallback onPauseToggle;
   final VoidCallback onStop;
 
   const WalkControls({
     super.key,
     required this.isWalking,
     required this.isPaused,
+    required this.distanceMeters,
+    required this.seconds,
     required this.onStart,
-    required this.onPauseToggle,
     required this.onStop,
   });
 
   @override
   Widget build(BuildContext context) {
     if (!isWalking) {
-      return Center(
-        child: ElevatedButton.icon(
-          onPressed: onStart,
-          icon: const Icon(Icons.play_arrow),
-          label: const Text("산책 시작", style: TextStyle(fontSize: 18)),
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-            backgroundColor: Colors.amber,
-            foregroundColor: Colors.white,
-            elevation: 5,
-          ),
-        ),
-      );
+      return const SizedBox.shrink(); // 초기 화면에서는 보이지 않음
     }
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        FloatingActionButton.large(
-          heroTag: "pause_btn",
-          onPressed: onPauseToggle,
-          backgroundColor: Colors.white,
-          child: Icon(
-            isPaused ? Icons.play_arrow : Icons.pause,
-            color: Colors.amber,
-            size: 32,
+    // 산책 중일 때 하단 컨트롤 (노란색 배경)
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.yellow.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.yellow.shade300, width: 2),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // 산책 중 정보
+          Row(
+            children: [
+              const Text(
+                "산책 중..",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                "${(distanceMeters / 1000).toStringAsFixed(1)}km, ${(seconds ~/ 60).toString().padLeft(2, '0')}:${(seconds % 60).toString().padLeft(2, '0')}",
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
           ),
-        ),
-        const SizedBox(width: 20),
-        FloatingActionButton.large(
-          heroTag: "stop_btn",
-          onPressed: onStop,
-          backgroundColor: Colors.redAccent,
-          child: const Icon(Icons.stop, color: Colors.white, size: 32),
-        ),
-      ],
+          // 산책 종료 버튼
+          ElevatedButton.icon(
+            onPressed: onStop,
+            icon: const Icon(Icons.stop, size: 20),
+            label: const Text("산책 종료"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

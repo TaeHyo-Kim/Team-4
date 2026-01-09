@@ -12,6 +12,8 @@ import 'features/social/viewmodels.dart';
 import 'features/social/views.dart';
 import 'features/walk/viewmodels.dart';
 import 'features/walk/views.dart';
+import 'features/profile/viewmodels.dart';
+import 'features/profile/views.dart';
 
 //안녕
 // [중요] flutterfire configure로 생성된 파일이 있다면 import 해야 함
@@ -44,7 +46,7 @@ class MyApp extends StatelessWidget {
         title: '멍멍 산책', // 앱 이름
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
-          primarySwatch: Colors.amber, // 앱의 메인 색상 (노랑/주황 계열)
+          primarySwatch: Colors.green, // 앱의 메인 색상 (초록색)
           scaffoldBackgroundColor: Colors.white,
           useMaterial3: true,
           appBarTheme: const AppBarTheme(
@@ -97,12 +99,13 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
 
-  // 탭별 화면 리스트
+  // 탭별 화면 리스트 (5개로 변경)
   final List<Widget> _screens = [
     const PetScreen(),   // 0: 펫 관리 (홈)
-    const SocialScreen(),// 1: 커뮤니티
+    const StatisticsScreen(),// 1: 통계 (비어있음)
     const WalkScreen(),  // 2: 산책
-    const ProfileScreen(),   // 3: 내 정보 (아래에 간단히 정의함)
+    const SocialScreen(),// 3: 검색
+    const ProfileScreen(),   // 4: 내 정보
   ];
 
   @override
@@ -112,77 +115,44 @@ class _MainScreenState extends State<MainScreen> {
         index: _selectedIndex,
         children: _screens,
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.pets),
-            label: '홈',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.people),
-            label: '커뮤니티',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.directions_walk),
-            label: '산책',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person),
-            label: '내 정보',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 간단한 내 정보 화면 (로그아웃 기능 포함)
-class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    final authVM = context.read<AuthViewModel>();
-
-    return Scaffold(
-      appBar: AppBar(title: const Text("내 정보")),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircleAvatar(
-              radius: 50,
-              backgroundColor: Colors.amber,
-              child: Icon(Icons.person, size: 50, color: Colors.white),
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFFFF9800), // 오렌지색 네비게이션 바
+        ),
+        child: NavigationBar(
+          selectedIndex: _selectedIndex,
+          backgroundColor: Colors.transparent,
+          indicatorColor: Colors.white.withOpacity(0.2),
+          onDestinationSelected: (index) {
+            setState(() {
+              _selectedIndex = index;
+            });
+          },
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.home, color: Colors.white),
+              selectedIcon: Icon(Icons.home, color: Colors.white),
+              label: '홈',
             ),
-            const SizedBox(height: 20),
-            Text(
-              user?.email ?? "이메일 정보 없음",
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            NavigationDestination(
+              icon: Icon(Icons.bar_chart, color: Colors.white),
+              selectedIcon: Icon(Icons.bar_chart, color: Colors.white),
+              label: '통계',
             ),
-            const SizedBox(height: 10),
-            Text("UID: ${user?.uid.substring(0, 6)}***", style: const TextStyle(color: Colors.grey)),
-            const SizedBox(height: 40),
-
-            // 로그아웃 버튼
-            ElevatedButton.icon(
-              onPressed: () {
-                authVM.logout(); // AuthViewModel의 로그아웃 호출
-                // AuthGate가 자동으로 감지하여 로그인 화면으로 보냄
-              },
-              icon: const Icon(Icons.logout),
-              label: const Text("로그아웃"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.grey[200],
-                foregroundColor: Colors.red,
-              ),
+            NavigationDestination(
+              icon: Icon(Icons.directions_walk, color: Colors.white),
+              selectedIcon: Icon(Icons.directions_walk, color: Colors.white),
+              label: '산책',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.search, color: Colors.white),
+              selectedIcon: Icon(Icons.search, color: Colors.white),
+              label: '검색',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person, color: Colors.white),
+              selectedIcon: Icon(Icons.person, color: Colors.white),
+              label: '프로필',
             ),
           ],
         ),
@@ -190,3 +160,93 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 }
+
+/// 통계 화면 (아직 구현 안됨)
+class StatisticsScreen extends StatefulWidget {
+  const StatisticsScreen({super.key});
+
+  @override
+  State<StatisticsScreen> createState() => _StatisticsScreenState();
+}
+
+class _StatisticsScreenState extends State<StatisticsScreen> {
+  bool _isDaily = true; // 일별/월별 토글
+  String _selectedType = "거리"; // 거리/시간 선택
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF4CAF50),
+        title: const Text(
+          "통계",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Column(
+        children: [
+          // 토글 및 선택 영역
+          Container(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                // 일별/월별 토글
+                Row(
+                  children: [
+                    const Text("일일 통계", style: TextStyle(fontSize: 14)),
+                    Switch(
+                      value: _isDaily,
+                      onChanged: (value) {
+                        setState(() {
+                          _isDaily = value;
+                        });
+                      },
+                      activeColor: const Color(0xFF4CAF50),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                // 거리/시간 선택
+                DropdownButton<String>(
+                  value: _selectedType,
+                  items: const [
+                    DropdownMenuItem(value: "거리", child: Text("거리")),
+                    DropdownMenuItem(value: "시간", child: Text("시간")),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        _selectedType = value;
+                      });
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          // 그래프 영역 (임시)
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.bar_chart, size: 80, color: Colors.grey),
+                  const SizedBox(height: 20),
+                  Text(
+                    "${_isDaily ? '일별' : '월별'} 통계 기능은 준비 중입니다.",
+                    style: const TextStyle(fontSize: 18, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ProfileScreen은 features/auth/views.dart에서 import하여 사용합니다.
