@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// [중요] 각 기능별 모델들을 import 합니다.
+// 각 기능별 모델들을 import 합니다.
 import '../features/auth/models.dart';
 import '../features/pet/models.dart';
 import '../features/walk/models.dart';
@@ -12,7 +12,7 @@ import '../features/social/models.dart';
 class AuthRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // [수정] 닉네임 중복 체크를 포함한 트랜잭션 저장 로직
+  // 닉네임 중복 체크를 포함한 트랜잭션 저장 로직
   Future<void> saveUserWithNicknameCheck(UserModel user) async {
     final nicknameRef = _db.collection('usernames').doc(user.nickname);
     final userRef = _db.collection('users').doc(user.uid);
@@ -30,11 +30,24 @@ class AuthRepository {
     });
   }
 
-  // 유저 정보 가져오기
+  // 유저 정보 가져오기 (단발성)
   Future<UserModel?> getUser(String uid) async {
     final doc = await _db.collection('users').doc(uid).get();
     if (!doc.exists) return null;
     return UserModel.fromDocument(doc);
+  }
+
+  // 유저 정보 실시간 스트림 (수정 즉시 반영용)
+  Stream<UserModel?> userStream(String uid) {
+    return _db.collection('users').doc(uid).snapshots().map((doc) {
+      if (!doc.exists) return null;
+      return UserModel.fromDocument(doc);
+    });
+  }
+
+  // [오류 해결용 추가] 유저 프로필 정보(닉네임, 한줄소개, 위치공개 등) 업데이트
+  Future<void> updateUser(String uid, Map<String, dynamic> data) async {
+    await _db.collection('users').doc(uid).update(data);
   }
 }
 
@@ -63,8 +76,9 @@ class PetRepository {
     DateTime? birthDate,
     String gender = 'M',
     bool isNeutered = false,
+    String? imageUrl,
   }) async {
-    final docRef = _db.collection('pets').doc(); // 자동 ID 생성
+    final docRef = _db.collection('pets').doc();
 
     final newPet = PetModel(
       id: docRef.id,
@@ -73,7 +87,7 @@ class PetRepository {
       breed: breed,
       birthDate: Timestamp.fromDate(birthDate ?? DateTime.now()),
       gender: gender,
-      imageUrl: '',
+      imageUrl: imageUrl ?? '',
       weight: weight,
       isNeutered: isNeutered,
       isPrimary: false,
@@ -82,7 +96,7 @@ class PetRepository {
     await docRef.set(newPet.toMap());
   }
 
-  // [추가됨] 반려동물 정보 수정 (대표 펫 설정용)
+  // 반려동물 정보 수정 (대표 펫 설정, 이미지 변경 등)
   Future<void> updatePet(String petId, Map<String, dynamic> data) async {
     await _db.collection('pets').doc(petId).update(data);
   }
@@ -119,43 +133,62 @@ class SocialRepository {
     return snapshot.docs.map((doc) => doc.id).toSet();
   }
 
-  // 팔로우
+  // 팔로우 실행 (안정성 강화 버전)
   Future<void> followUser({required String myUid, required String targetUid}) async {
     final myRef = _db.collection('users').doc(myUid);
     final targetRef = _db.collection('users').doc(targetUid);
-
     final followRef = myRef.collection('following').doc(targetUid);
     final followerRef = targetRef.collection('followers').doc(myUid);
 
-    return _db.runTransaction((transaction) async {
-      final check = await transaction.get(followRef);
-      if (check.exists) return;
+    try {
+      await _db.runTransaction((transaction) async {
+        // 읽기는 항상 쓰기보다 먼저!
+        final myDoc = await transaction.get(myRef);
+        final targetDoc = await transaction.get(targetRef);
+        final followDoc = await transaction.get(followRef);
 
-      transaction.set(followRef, {'createdAt': FieldValue.serverTimestamp()});
-      transaction.set(followerRef, {'createdAt': FieldValue.serverTimestamp()});
+        if (followDoc.exists) return; // 이미 팔로우 중이면 무시
+        if (!myDoc.exists || !targetDoc.exists) return;
 
-      transaction.update(myRef, {'stats.followingCount': FieldValue.increment(1)});
-      transaction.update(targetRef, {'stats.followerCount': FieldValue.increment(1)});
-    });
+        // 쓰기 작업
+        transaction.set(followRef, {'createdAt': FieldValue.serverTimestamp()});
+        transaction.set(followerRef, {'createdAt': FieldValue.serverTimestamp()});
+
+        // 내 정보 업데이트 (followingCount +1)
+        transaction.update(myRef, {'stats.followingCount': FieldValue.increment(1)});
+
+        // 상대방 정보 업데이트 (followerCount +1)
+        transaction.update(targetRef, {'stats.followerCount': FieldValue.increment(1)});
+      });
+    } catch (e) {
+      print("Follow Transaction Error: $e");
+      rethrow; // ViewModel에서 에러를 잡아 스낵바를 띄우게 함
+    }
   }
 
-  // 언팔로우
+  // 언팔로우 실행
   Future<void> unfollowUser({required String myUid, required String targetUid}) async {
     final myRef = _db.collection('users').doc(myUid);
     final targetRef = _db.collection('users').doc(targetUid);
-
     final followRef = myRef.collection('following').doc(targetUid);
     final followerRef = targetRef.collection('followers').doc(myUid);
 
-    return _db.runTransaction((transaction) async {
-      final check = await transaction.get(followRef);
-      if (!check.exists) return;
+    await _db.runTransaction((transaction) async {
+      final followDoc = await transaction.get(followRef);
+      if (!followDoc.exists) return;
+
+      final myDoc = await transaction.get(myRef);
+      final targetDoc = await transaction.get(targetRef);
 
       transaction.delete(followRef);
       transaction.delete(followerRef);
 
-      transaction.update(myRef, {'stats.followingCount': FieldValue.increment(-1)});
-      transaction.update(targetRef, {'stats.followerCount': FieldValue.increment(-1)});
+      if (myDoc.exists) {
+        transaction.update(myRef, {'stats.followingCount': FieldValue.increment(-1)});
+      }
+      if (targetDoc.exists) {
+        transaction.update(targetRef, {'stats.followerCount': FieldValue.increment(-1)});
+      }
     });
   }
 }
@@ -175,7 +208,7 @@ class WalkRepository {
     await docRef.set(walk.toMap());
   }
 
-  // 내 산책 기록 불러오기
+  // 내 산책 기록 불러오기 (최신순 정렬)
   Future<List<WalkRecordModel>> getMyWalks(String userId) async {
     final snapshot = await _db
         .collection('walks')
