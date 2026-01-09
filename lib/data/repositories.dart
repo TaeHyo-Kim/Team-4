@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// [중요] 각 기능별 모델들을 import 합니다.
+// 각 기능별 모델들을 import 합니다.
 import '../features/auth/models.dart';
 import '../features/pet/models.dart';
 import '../features/walk/models.dart';
@@ -12,7 +12,7 @@ import '../features/social/models.dart';
 class AuthRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // [수정] 닉네임 중복 체크를 포함한 트랜잭션 저장 로직
+  // 닉네임 중복 체크를 포함한 트랜잭션 저장 로직
   Future<void> saveUserWithNicknameCheck(UserModel user) async {
     final nicknameRef = _db.collection('usernames').doc(user.nickname);
     final userRef = _db.collection('users').doc(user.uid);
@@ -35,6 +35,11 @@ class AuthRepository {
     final doc = await _db.collection('users').doc(uid).get();
     if (!doc.exists) return null;
     return UserModel.fromDocument(doc);
+  }
+
+  // [오류 해결용 추가] 유저 프로필 정보(닉네임, 한줄소개, 위치공개 등) 업데이트
+  Future<void> updateUser(String uid, Map<String, dynamic> data) async {
+    await _db.collection('users').doc(uid).update(data);
   }
 }
 
@@ -63,9 +68,9 @@ class PetRepository {
     DateTime? birthDate,
     String gender = 'M',
     bool isNeutered = false,
-    String? imageUrl, // <--- 추가: 이미지 URL을 받음
+    String? imageUrl,
   }) async {
-    final docRef = _db.collection('pets').doc(); // 자동 ID 생성
+    final docRef = _db.collection('pets').doc();
 
     final newPet = PetModel(
       id: docRef.id,
@@ -74,7 +79,7 @@ class PetRepository {
       breed: breed,
       birthDate: Timestamp.fromDate(birthDate ?? DateTime.now()),
       gender: gender,
-      imageUrl: imageUrl ?? '', // <--- 추가: URL 저장
+      imageUrl: imageUrl ?? '',
       weight: weight,
       isNeutered: isNeutered,
       isPrimary: false,
@@ -83,7 +88,7 @@ class PetRepository {
     await docRef.set(newPet.toMap());
   }
 
-  // [추가됨] 반려동물 정보 수정 (대표 펫 설정용)
+  // 반려동물 정보 수정 (대표 펫 설정, 이미지 변경 등)
   Future<void> updatePet(String petId, Map<String, dynamic> data) async {
     await _db.collection('pets').doc(petId).update(data);
   }
@@ -120,7 +125,7 @@ class SocialRepository {
     return snapshot.docs.map((doc) => doc.id).toSet();
   }
 
-  // 팔로우
+  // 팔로우 실행 (트랜잭션으로 팔로잉/팔로워 수 동시 업데이트)
   Future<void> followUser({required String myUid, required String targetUid}) async {
     final myRef = _db.collection('users').doc(myUid);
     final targetRef = _db.collection('users').doc(targetUid);
@@ -140,7 +145,7 @@ class SocialRepository {
     });
   }
 
-  // 언팔로우
+  // 언팔로우 실행
   Future<void> unfollowUser({required String myUid, required String targetUid}) async {
     final myRef = _db.collection('users').doc(myUid);
     final targetRef = _db.collection('users').doc(targetUid);
@@ -176,7 +181,7 @@ class WalkRepository {
     await docRef.set(walk.toMap());
   }
 
-  // 내 산책 기록 불러오기
+  // 내 산책 기록 불러오기 (최신순 정렬)
   Future<List<WalkRecordModel>> getMyWalks(String userId) async {
     final snapshot = await _db
         .collection('walks')

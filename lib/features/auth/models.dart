@@ -5,11 +5,13 @@ class UserStats {
   final double totalWalkDistance;
   final int followerCount;
   final int followingCount;
+  final int postCount; // [추가] 게시물 수
 
   UserStats({
     this.totalWalkDistance = 0.0,
     this.followerCount = 0,
     this.followingCount = 0,
+    this.postCount = 0, // [추가] 기본값 0
   });
 
   Map<String, dynamic> toMap() {
@@ -17,6 +19,7 @@ class UserStats {
       'totalWalkDistance': totalWalkDistance,
       'followerCount': followerCount,
       'followingCount': followingCount,
+      'postCount': postCount, // [추가]
     };
   }
 
@@ -25,6 +28,7 @@ class UserStats {
       totalWalkDistance: (map['totalWalkDistance'] ?? 0).toDouble(),
       followerCount: map['followerCount'] ?? 0,
       followingCount: map['followingCount'] ?? 0,
+      postCount: map['postCount'] ?? 0, // [추가]
     );
   }
 }
