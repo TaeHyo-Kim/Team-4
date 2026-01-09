@@ -327,8 +327,16 @@ class _WalkScreenState extends State<WalkScreen> {
               );
             }
           } catch (e) {
+            // [수정] 에러 메시지를 구체적으로 표시 (permission-denied 등)
+            String errorMsg = e.toString();
+            if (errorMsg.contains("permission-denied")) {
+              errorMsg = "서버 권한이 거부되었습니다. 관리자에게 문의하세요.";
+            }
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("저장 실패: $e")),
+              SnackBar(
+                content: Text("저장 실패: $errorMsg"),
+                backgroundColor: Colors.red,
+              ),
             );
           }
         },

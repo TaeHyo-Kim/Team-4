@@ -29,7 +29,7 @@ dependencies:
   # ------------------------------------------------
   sqflite: ^2.3.3             # 로컬 SQLite DB (경로 실시간 저장)
   path: ^1.9.0                # DB 파일 경로 관리
-  flutter_polyline_points: ^2.1.0 # GPS 좌표를 압축된 문자열로 변환 (DB 용량 절약)
+  flutter_polyline_points: ^3.1.0 # GPS 좌표를 압축된 문자열로 변환 (DB 용량 절약)
   # ------------------------------------------------
   # ------------------------------------------------
   # 3. 유틸리티 및 기능
@@ -37,7 +37,7 @@ dependencies:
   rxdart: ^0.27.7
   provider: ^6.1.2
   image_picker: ^1.1.2
-  intl: ^0.19.0
+  intl: ^0.20.2
   uuid: ^4.4.0
 
   # ------------------------------------------------
@@ -48,7 +48,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
+  flutter_lints: ^6.0.0
 
 flutter:
   uses-material-design: true
