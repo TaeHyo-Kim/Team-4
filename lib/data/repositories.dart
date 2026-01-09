@@ -30,11 +30,19 @@ class AuthRepository {
     });
   }
 
-  // 유저 정보 가져오기
+  // 유저 정보 가져오기 (단발성)
   Future<UserModel?> getUser(String uid) async {
     final doc = await _db.collection('users').doc(uid).get();
     if (!doc.exists) return null;
     return UserModel.fromDocument(doc);
+  }
+
+  // 유저 정보 실시간 스트림 (수정 즉시 반영용)
+  Stream<UserModel?> userStream(String uid) {
+    return _db.collection('users').doc(uid).snapshots().map((doc) {
+      if (!doc.exists) return null;
+      return UserModel.fromDocument(doc);
+    });
   }
 
   // [오류 해결용 추가] 유저 프로필 정보(닉네임, 한줄소개, 위치공개 등) 업데이트

@@ -28,10 +28,9 @@ class ProfileView extends StatelessWidget {
           )
         ],
       ),
-      body: ListView( // 레이아웃 겹침 방지를 위해 ListView 사용
-        padding: EdgeInsets.zero,
+      body: Column(
         children: [
-          // 1. 프로필 상단 정보 (이미지, 이름, 소개, 게시물/팔로워/팔로잉 + 우측 편집 버튼)
+          // 1. [고정] 프로필 상단 정보 (이미지, 이름, 소개, 팔로워/팔로잉 + 우측 편집 버튼)
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 35, 15, 25), // 위아래 간격을 충분히 확보
             child: Row(
@@ -49,38 +48,43 @@ class ProfileView extends StatelessWidget {
                       : null,
                 ),
                 const SizedBox(width: 15),
-                // 텍스트 정보 영역
+                // 텍스트 정보 영역 (남은 공간 차지)
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(user?.nickname ?? "익명 유저", 
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 4),
                       Text(user?.bio ?? "좋은 하루 되세요", 
                         style: const TextStyle(color: Colors.grey, fontSize: 13),
                         maxLines: 1, overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 8),
-                      // 게시물 / 팔로우 / 팔로잉 (한 줄에 표시)
-                      Row(
-                        children: [
-                          Text("게시물 ${user?.stats.postCount ?? 0}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                          const SizedBox(width: 12),
-                          Text("팔로우 ${user?.stats.followingCount ?? 0}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                          const SizedBox(width: 12),
-                          Text("팔로워 ${user?.stats.followerCount ?? 0}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                        ],
+                      // 게시물 / 팔로우 / 팔로잉 (너비에 맞춰 자동 크기 조절)
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Row(
+                          children: [
+                            Text("게시물 ${user?.stats.postCount ?? 0}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                            const SizedBox(width: 10),
+                            Text("팔로우 ${user?.stats.followingCount ?? 0}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                            const SizedBox(width: 10),
+                            Text("팔로워 ${user?.stats.followerCount ?? 0}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                          ],
+                        ),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(width: 8),
-                // 프로필 편집 버튼
+                // 프로필 편집 버튼 (우측 배치)
                 ElevatedButton(
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileEditView())),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2196F3),
+                    backgroundColor: const Color(0xFF2196F3), // 이미지와 같은 파란색
                     foregroundColor: Colors.white,
                     elevation: 1,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -91,31 +95,37 @@ class ProfileView extends StatelessWidget {
               ],
             ),
           ),
+          const Divider(thickness: 1, color: Colors.black12, height: 1),
 
-          const SizedBox(height: 5),
-          const Divider(thickness: 1, color: Colors.black12),
+          // 2. [스크롤] 반려동물 목록 및 피드
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                // 반려동물 목록
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 10),
+                  child: PetScreen(),
+                ),
 
-          // 2. 반려동물 목록
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 10),
-            child: PetScreen(),
-          ),
+                const SizedBox(height: 80), // 중앙 배치를 위한 여백 조정
 
-          const SizedBox(height: 80),
-
-          // 3. 산책 기록 없음 안내
-          const Center(
-            child: Text(
-              "아직 산책 기록이 없습니다.",
-              style: TextStyle(
-                color: Colors.black38,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
+                // 산책 기록 없음 안내
+                const Center(
+                  child: Text(
+                    "아직 산책 기록이 없습니다.",
+                    style: TextStyle(
+                      color: Colors.black38,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 40),
+              ],
             ),
           ),
-          
-          const SizedBox(height: 40),
         ],
       ),
     );
@@ -206,9 +216,9 @@ class _ProfileEditViewState extends State<ProfileEditView> {
                   Positioned(
                     right: 0, bottom: 0,
                     child: Container(
-                      padding: const EdgeInsets.all(4),
+                      padding: const EdgeInsets.all(6), // 패딩 축소 (8 -> 6)
                       decoration: const BoxDecoration(color: Color(0xFF3498DB), shape: BoxShape.circle),
-                      child: const Icon(Icons.camera_alt, size: 20, color: Colors.white),
+                      child: const Icon(Icons.camera_alt, size: 22, color: Colors.white), // 사이즈 축소 (28 -> 22)
                     ),
                   ),
                 ],

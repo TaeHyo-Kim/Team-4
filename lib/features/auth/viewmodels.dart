@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../data/repositories.dart';
@@ -11,6 +12,7 @@ class AuthViewModel with ChangeNotifier {
   UserModel? _userModel;
   bool _isLoading = false;
   String? _errorMessage;
+  StreamSubscription? _userSub;
 
   User? get user => _user;
   UserModel? get userModel => _userModel;
@@ -18,14 +20,22 @@ class AuthViewModel with ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   AuthViewModel() {
-    _auth.authStateChanges().listen((firebaseUser) async {
+    _auth.authStateChanges().listen((firebaseUser) {
       _user = firebaseUser;
+      
+      // 기존 구독 해제
+      _userSub?.cancel();
+
       if (firebaseUser != null) {
-        await fetchUserProfile();
+        // [핵심] 유저 데이터 실시간 구독 시작
+        _userSub = _repo.userStream(firebaseUser.uid).listen((updatedUser) {
+          _userModel = updatedUser;
+          notifyListeners(); // 서버 데이터가 변경될 때마다 앱 UI를 즉시 갱신
+        });
       } else {
         _userModel = null;
+        notifyListeners();
       }
-      notifyListeners();
     });
   }
 
@@ -132,6 +142,13 @@ class AuthViewModel with ChangeNotifier {
   Future<void> logout() async {
     await _auth.signOut();
     _userModel = null;
+    _userSub?.cancel();
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _userSub?.cancel();
+    super.dispose();
   }
 }
