@@ -5,7 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Timestamp, GeoPoint용
-
+import '../../data/database_helper.dart';
 import '../../data/repositories.dart';
 import 'models.dart';
 
@@ -141,11 +141,14 @@ class WalkViewModel with ChangeNotifier {
     );
 
     _positionStream = Geolocator.getPositionStream(locationSettings: locationSettings)
-        .listen((Position position) {
+        .listen((Position position) async {
       if (_isPaused) return;
-      if (position.accuracy > 20.0) return;
+      if (position.accuracy > _accuracyThreshold) return;
 
       final newPoint = LatLng(position.latitude, position.longitude);
+
+      // [추가] 로컬 DB에 즉시 저장
+      await WalkDbHelper.instance.insertPoint(newPoint.latitude, newPoint.longitude);
 
       if (_route.isNotEmpty) {
         final lastPoint = _route.last;
@@ -165,27 +168,12 @@ class WalkViewModel with ChangeNotifier {
       _currentPosition = newPoint;
 
       // 사용자가 조작 중이 아닐 때만 카메라 자동 추적
-      if (!_isUserInteracting) {
-        moveToCurrentLocation();
-      }
+      if (!_isUserInteracting) moveToCurrentLocation();
       notifyListeners();
     });
   }
 
-  // ------------------------------------------------------------------------
-  // 2. 일시정지 / 재개
-  // ------------------------------------------------------------------------
-  void togglePause() {
-    if (!_isWalking) return;
-    _isPaused = !_isPaused;
-
-    if (_isPaused) {
-      _timer?.cancel();
-    } else {
-      _startTimer();
-    }
-    notifyListeners();
-  }
+  // 2. 일시정지 / 재개 - 삭제
 
   // ------------------------------------------------------------------------
   // 3. 산책 종료 및 저장 (모델 구조에 맞춤)
@@ -248,14 +236,17 @@ class WalkViewModel with ChangeNotifier {
 
     // [보정 로직 4] 네트워크 미연결 시 재시도 로직이 포함된 저장
     try {
-      // 업로드 시도
+      // 1. 서버 업로드 시도
       await _repo.saveWalk(newRecord);
+      // 2. 서버 저장 성공 시 로컬 캐시 삭제
+      await WalkDbHelper.instance.clearCache();
     } catch (e) {
-      // [해결책] 네트워크 오류 발생 시 로컬 DB에 보관했다가 나중에 전송
-      print("업로드 실패, 로컬에 임시 저장: $e");
-      // await _localDb.saveForLater(newRecord);
+      // 실패 시 로컬 DB에 데이터가 남아있으므로, 나중에 재시도 로직 구현 가능
+      debugPrint("업로드 실패, 로컬 DB에 좌표 보존됨: $e");
       rethrow;
     } finally {
+      _positionStream?.cancel();
+      _timer?.cancel();
       _isWalking = false;
       notifyListeners();
     }
