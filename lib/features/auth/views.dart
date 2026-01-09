@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'viewmodels.dart';
 import '../pet/views.dart';
 import '../../data/repositories.dart';
@@ -295,11 +296,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF4CAF50),
+        backgroundColor: const Color(0xFF2ECC71),
         title: const Text("프로필", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         elevation: 0,
         actions: [
-          IconButton(icon: const Icon(Icons.menu, color: Colors.white), onPressed: () => _showSettingsMenu(context, authVM)),
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.white),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -383,22 +387,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _showSettingsMenu(BuildContext context, AuthViewModel authVM) {
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.red),
-            title: const Text("로그아웃", style: TextStyle(color: Colors.red)),
-            onTap: () { Navigator.pop(ctx); _showLogoutDialog(context, authVM); },
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showEditProfileDialog(BuildContext context, AuthViewModel authVM, dynamic user) {
     final nicknameCtrl = TextEditingController(text: user?.nickname ?? '');
     final bioCtrl = TextEditingController(text: user?.bio ?? '');
@@ -461,18 +449,333 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+}
 
-  void _showLogoutDialog(BuildContext context, AuthViewModel authVM) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("로그아웃"),
-        content: const Text("정말 로그아웃 하시겠습니까?"),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("취소")),
-          TextButton(onPressed: () { authVM.logout(); Navigator.pop(ctx); }, child: const Text("로그아웃", style: TextStyle(color: Colors.red))),
+// -----------------------------------------------------------------------------
+// 5. 설정 화면 (SettingsScreen) - 이미지1
+// -----------------------------------------------------------------------------
+class SettingsScreen extends StatelessWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final authVM = context.read<AuthViewModel>();
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF2ECC71),
+        title: const Text("설정", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        elevation: 0,
+        actions: [IconButton(icon: const Icon(Icons.menu), onPressed: () {})],
+      ),
+      body: Column(
+        children: [
+          const SizedBox(height: 10),
+          _buildMenuItem(context, "계정 관리", () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountManagementScreen()))),
+          _buildMenuItem(context, "공개 범위", () {}),
+          _buildMenuItem(context, "권한 관리", () {}),
+          _buildMenuItem(context, "차단된 계정", () {}),
+          const Spacer(),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 40),
+            child: OutlinedButton(
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text("로그아웃"),
+                    content: const Text("정말 로그아웃 하시겠습니까?"),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("취소")),
+                      TextButton(onPressed: () { Navigator.pop(ctx); authVM.logout(); Navigator.pop(context); }, child: const Text("로그아웃", style: TextStyle(color: Colors.red))),
+                    ],
+                  ),
+                );
+              },
+              style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.black), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+              child: const Text("로그아웃", style: TextStyle(color: Colors.black)),
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildMenuItem(BuildContext context, String title, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFDF5E6),
+          border: Border.all(color: Colors.black),
+        ),
+        child: Center(child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+      ),
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 6. 계정 관리 화면 (AccountManagementScreen) - 이미지2 좌측
+// -----------------------------------------------------------------------------
+class AccountManagementScreen extends StatelessWidget {
+  const AccountManagementScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final authVM = context.watch<AuthViewModel>();
+    final user = authVM.userModel;
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF2ECC71),
+        title: const Text("계정 관리", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        elevation: 0,
+        actions: [IconButton(icon: const Icon(Icons.menu), onPressed: () {})],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("계정 정보", style: TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text("이메일", style: TextStyle(fontSize: 18)),
+                Text(user?.email ?? "", style: const TextStyle(fontSize: 18)),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text("닉네임", style: TextStyle(fontSize: 18)),
+                Text(user?.nickname ?? "", style: const TextStyle(fontSize: 18, color: Colors.black)),
+              ],
+            ),
+            const SizedBox(height: 40),
+            const Text("계정 보안", style: TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            _buildActionItem("비밀번호 변경", () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PasswordChangeStep1Screen()))),
+            const Spacer(),
+            Center(
+              child: OutlinedButton(
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text("회원 탈퇴"),
+                      content: const Text("정말 탈퇴하시겠습니까? 모든 데이터가 삭제됩니다."),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("취소")),
+                        TextButton(onPressed: () async {
+                          await authVM.deleteAccount();
+                          if (ctx.mounted) {
+                            Navigator.pop(ctx);
+                            Navigator.pop(context);
+                            Navigator.pop(context);
+                          }
+                        }, child: const Text("회원탈퇴", style: TextStyle(color: Colors.red))),
+                      ],
+                    ),
+                  );
+                },
+                style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.black)),
+                child: const Text("회원탈퇴", style: TextStyle(color: Colors.black)),
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionItem(String title, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        decoration: BoxDecoration(color: const Color(0xFFFDF5E6), border: Border.all(color: Colors.black)),
+        child: Text(title, style: const TextStyle(fontSize: 18)),
+      ),
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 7. 비밀번호 변경 - 1단계: 현재 비번 확인 (이미지2 중간)
+// -----------------------------------------------------------------------------
+class PasswordChangeStep1Screen extends StatefulWidget {
+  const PasswordChangeStep1Screen({super.key});
+
+  @override
+  State<PasswordChangeStep1Screen> createState() => _PasswordChangeStep1ScreenState();
+}
+
+class _PasswordChangeStep1ScreenState extends State<PasswordChangeStep1Screen> {
+  final _pwCtrl = TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.read<AuthViewModel>().userModel;
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF2ECC71),
+        title: const Text("비밀번호 변경", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        elevation: 0,
+        actions: [IconButton(icon: const Icon(Icons.menu), onPressed: () {})],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Icon(Icons.pets, size: 80, color: Colors.amber),
+            const SizedBox(height: 20),
+            const Text("댕댕워킹", style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 40),
+            const Text("비밀번호 확인", style: TextStyle(fontSize: 18)),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10), 
+              decoration: BoxDecoration(border: Border.all(color: Colors.black)),
+              child: Text(user?.email ?? "", style: const TextStyle(fontSize: 18)),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _pwCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(
+                hintText: "비밀번호를 입력하세요..", 
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10), 
+              ),
+            ),
+            const SizedBox(height: 20),
+            Center(
+              child: ElevatedButton(
+                onPressed: () async {
+                  if (_pwCtrl.text.isEmpty) return;
+                  final vm = context.read<AuthViewModel>();
+                  final success = await vm.reauthenticate(_pwCtrl.text);
+                  if (success) {
+                    if (mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => const PasswordChangeStep2Screen()));
+                  } else {
+                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(vm.errorMessage ?? "비밀번호가 틀렸습니다."), backgroundColor: Colors.redAccent));
+                  }
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black, side: const BorderSide(color: Colors.black)),
+                child: const Text("확인"),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Center(
+              child: TextButton(
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ForgotPasswordScreen())),
+                child: const Text("비밀번호가 기억나지 않으세요?", style: TextStyle(color: Colors.grey, decoration: TextDecoration.underline)),
+              ),
+            ),
+            const SizedBox(height: 80),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 8. 비밀번호 변경 - 2단계: 새 비번 입력 (이미지2 우측)
+// -----------------------------------------------------------------------------
+class PasswordChangeStep2Screen extends StatefulWidget {
+  const PasswordChangeStep2Screen({super.key});
+
+  @override
+  State<PasswordChangeStep2Screen> createState() => _PasswordChangeStep2ScreenState();
+}
+
+class _PasswordChangeStep2ScreenState extends State<PasswordChangeStep2Screen> {
+  final _newPwCtrl = TextEditingController();
+  final _confirmPwCtrl = TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF2ECC71),
+        title: const Text("비밀번호 변경", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        elevation: 0,
+        actions: [IconButton(icon: const Icon(Icons.menu), onPressed: () {})],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Icon(Icons.pets, size: 80, color: Colors.amber),
+            const SizedBox(height: 20),
+            const Text("댕댕워킹", style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 40),
+            const Text("비밀번호 변경", style: TextStyle(fontSize: 18)),
+            const SizedBox(height: 20),
+            _buildPwField("변경할 비밀번호", _newPwCtrl),
+            const SizedBox(height: 10),
+            _buildPwField("변경 비밀번호 확인", _confirmPwCtrl),
+            const SizedBox(height: 40),
+            Center(
+              child: ElevatedButton(
+                onPressed: () async {
+                  if (_newPwCtrl.text.isEmpty || _newPwCtrl.text != _confirmPwCtrl.text) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("비밀번호가 일치하지 않습니다.")));
+                    return;
+                  }
+                  try {
+                    await FirebaseAuth.instance.currentUser?.updatePassword(_newPwCtrl.text);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("비밀번호가 변경되었습니다. 다시 로그인해주세요.")));
+                      context.read<AuthViewModel>().logout();
+                      Navigator.of(context).popUntil((route) => route.isFirst);
+                    }
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("변경 실패: $e")));
+                  }
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black, side: const BorderSide(color: Colors.black)),
+                child: const Text("변경"),
+              ),
+            ),
+            const SizedBox(height: 80),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPwField(String label, TextEditingController ctrl) {
+    return Row(
+      children: [
+        SizedBox(width: 120, child: Text(label, style: const TextStyle(fontSize: 14))),
+        Expanded(
+          child: TextField(
+            controller: ctrl, 
+            obscureText: true, 
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), 
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

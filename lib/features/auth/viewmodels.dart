@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../data/repositories.dart';
 import 'models.dart';
 
@@ -23,14 +24,12 @@ class AuthViewModel with ChangeNotifier {
     _auth.authStateChanges().listen((firebaseUser) {
       _user = firebaseUser;
       
-      // 기존 구독 해제
       _userSub?.cancel();
 
       if (firebaseUser != null) {
-        // [핵심] 유저 데이터 실시간 구독 시작
         _userSub = _repo.userStream(firebaseUser.uid).listen((updatedUser) {
           _userModel = updatedUser;
-          notifyListeners(); // 서버 데이터가 변경될 때마다 앱 UI를 즉시 갱신
+          notifyListeners();
         });
       } else {
         _userModel = null;
@@ -44,7 +43,6 @@ class AuthViewModel with ChangeNotifier {
     notifyListeners();
   }
 
-  // [중요] 영문 에러 코드를 한국어 메시지로 변환
   String _parseFirebaseError(FirebaseAuthException e) {
     switch (e.code) {
       case 'email-already-in-use': return '이미 가입된 이메일입니다.';
@@ -54,6 +52,7 @@ class AuthViewModel with ChangeNotifier {
       case 'wrong-password':
       case 'invalid-credential': return '이메일 또는 비밀번호가 틀렸습니다.';
       case 'too-many-requests': return '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.';
+      case 'requires-recent-login': return '보안을 위해 다시 로그인한 후 시도해 주세요.';
       default: return '오류가 발생했습니다: ${e.message}';
     }
   }
@@ -122,7 +121,6 @@ class AuthViewModel with ChangeNotifier {
     }
   }
 
-  // 비밀번호 재설정 이메일 전송 기능 추가
   Future<void> sendPasswordResetEmail(String email) async {
     _isLoading = true;
     _errorMessage = null;
@@ -144,6 +142,61 @@ class AuthViewModel with ChangeNotifier {
     _userModel = null;
     _userSub?.cancel();
     notifyListeners();
+  }
+
+  // 비밀번호 재인증 (보안 작업 전 확인)
+  Future<bool> reauthenticate(String password) async {
+    final user = _auth.currentUser;
+    if (user == null || user.email == null) return false;
+
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final credential = EmailAuthProvider.credential(email: user.email!, password: password);
+      await user.reauthenticateWithCredential(credential);
+      return true;
+    } on FirebaseAuthException catch (e) {
+      _errorMessage = _parseFirebaseError(e);
+      return false;
+    } catch (e) {
+      _errorMessage = '인증에 실패했습니다.';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // 회원 탈퇴 기능 추가
+  Future<void> deleteAccount() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // 1. Firestore 유저 데이터 삭제
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).delete();
+      
+      // 2. Firebase Auth 계정 삭제
+      await user.delete();
+      
+      _userModel = null;
+      _userSub?.cancel();
+    } on FirebaseAuthException catch (e) {
+      _errorMessage = _parseFirebaseError(e);
+      if (e.code == 'requires-recent-login') {
+        _errorMessage = '보안을 위해 다시 로그인한 후 탈퇴를 진행해 주세요.';
+      }
+    } catch (e) {
+      _errorMessage = '회원 탈퇴 중 오류가 발생했습니다.';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   @override

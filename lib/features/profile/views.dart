@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../auth/viewmodels.dart';
+import '../auth/views.dart'; // SettingsScreen이 있는 auth/views.dart import
 import '../pet/views.dart'; 
 import 'viewmodels.dart';
 
@@ -24,7 +25,8 @@ class ProfileView extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white),
-            onPressed: () => _showSettingsSheet(context, authVM),
+            // [수정] 바텀 시트 대신 설정 화면(SettingsScreen)으로 이동
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
           )
         ],
       ),
@@ -127,33 +129,6 @@ class ProfileView extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  void _showSettingsSheet(BuildContext context, AuthViewModel authVM) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Text("설정", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text("로그아웃", style: TextStyle(color: Colors.red)),
-              onTap: () {
-                Navigator.pop(ctx);
-                authVM.logout();
-              },
-            ),
-            const SizedBox(height: 10),
-          ],
-        ),
       ),
     );
   }
