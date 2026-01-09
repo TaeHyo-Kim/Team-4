@@ -21,7 +21,7 @@ class AuthViewModel with ChangeNotifier {
     _auth.authStateChanges().listen((firebaseUser) async {
       _user = firebaseUser;
       if (firebaseUser != null) {
-        await _fetchUserProfile();
+        await fetchUserProfile();
       } else {
         _userModel = null;
       }
@@ -34,7 +34,7 @@ class AuthViewModel with ChangeNotifier {
     notifyListeners();
   }
 
-  // [중요] 영문 에러 코드를 한국어 메시지로 변환 [cite: 2025-07-25]
+  // [중요] 영문 에러 코드를 한국어 메시지로 변환
   String _parseFirebaseError(FirebaseAuthException e) {
     switch (e.code) {
       case 'email-already-in-use': return '이미 가입된 이메일입니다.';
@@ -48,7 +48,7 @@ class AuthViewModel with ChangeNotifier {
     }
   }
 
-  Future<void> _fetchUserProfile() async {
+  Future<void> fetchUserProfile() async {
     if (_user == null) return;
     try {
       _userModel = await _repo.getUser(_user!.uid);
@@ -79,7 +79,6 @@ class AuthViewModel with ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      // 1. Firebase Auth 계정 생성
       final userCredential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
@@ -90,16 +89,14 @@ class AuthViewModel with ChangeNotifier {
         uid: uid,
         email: email,
         nickname: nickname,
-        isLocationPublic: true, // [cite: 2025-09-15] true 사용
+        isLocationPublic: true,
         createdAt: DateTime.now(),
         stats: UserStats(),
       );
 
-      // 2. 닉네임 중복 체크가 포함된 저장 로직 실행
       try {
         await _repo.saveUserWithNicknameCheck(newUser);
       } catch (e) {
-        // 닉네임 중복 시 생성된 계정도 삭제 (데이터 꼬임 방지)
         await userCredential.user?.delete();
         rethrow;
       }
@@ -108,7 +105,6 @@ class AuthViewModel with ChangeNotifier {
     } on FirebaseAuthException catch (e) {
       _errorMessage = _parseFirebaseError(e);
     } catch (e) {
-      // 레포지토리의 "이미 사용 중인 닉네임입니다." 예외 처리
       _errorMessage = e.toString().replaceAll("Exception: ", "");
     } finally {
       _isLoading = false;
@@ -116,7 +112,7 @@ class AuthViewModel with ChangeNotifier {
     }
   }
 
-  // 비밀번호 재설정 이메일 전송
+  // 비밀번호 재설정 이메일 전송 기능 추가
   Future<void> sendPasswordResetEmail(String email) async {
     _isLoading = true;
     _errorMessage = null;

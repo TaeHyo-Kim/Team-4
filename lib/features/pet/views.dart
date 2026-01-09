@@ -44,228 +44,228 @@ class PetScreen extends StatelessWidget {
       ),
       body: petVM.pets.isEmpty
           ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.pets, size: 48, color: Colors.grey),
-                  const SizedBox(height: 10),
-                  const Text("등록된 반려동물이 없습니다."),
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const PetRegistrationScreen()));
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF9800),
-                      foregroundColor: Colors.white,
-                    ),
-                    child: const Text("반려동물 등록하기"),
-                  ),
-                ],
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.pets, size: 48, color: Colors.grey),
+            const SizedBox(height: 10),
+            const Text("등록된 반려동물이 없습니다."),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const PetRegistrationScreen()));
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF9800),
+                foregroundColor: Colors.white,
               ),
-            )
+              child: const Text("반려동물 등록하기"),
+            ),
+          ],
+        ),
+      )
           : Stack(
-              children: [
-                // 펫 리스트
-                ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: petVM.pets.length,
-                  itemBuilder: (context, index) {
-                    final pet = petVM.pets[index];
-                    final isPrimary = pet.isPrimary;
-                    final age = _calculateAge(pet.birthDate.toDate());
+        children: [
+          // 펫 리스트
+          ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: petVM.pets.length,
+            itemBuilder: (context, index) {
+              final pet = petVM.pets[index];
+              final isPrimary = pet.isPrimary;
+              final age = _calculateAge(pet.birthDate.toDate());
 
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => PetRegistrationScreen(petToEdit: pet),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isPrimary ? const Color(0xFFFFD700) : Colors.grey.shade300,
-                            width: isPrimary ? 2 : 1,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.grey.withOpacity(0.1),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
+              return GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PetRegistrationScreen(petToEdit: pet),
+                    ),
+                  );
+                },
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isPrimary ? const Color(0xFFFFD700) : Colors.grey.shade300,
+                      width: isPrimary ? 2 : 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.1),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      // 프로필 사진
+                      Stack(
+                        children: [
+                          Container(
+                            width: 70,
+                            height: 70,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.grey.shade200,
                             ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            // 프로필 사진
-                            Stack(
-                              children: [
-                                Container(
-                                  width: 70,
-                                  height: 70,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Colors.grey.shade200,
-                                  ),
-                                  child: pet.imageUrl.isNotEmpty
-                                      ? ClipOval(
-                                          child: Image.network(
-                                            pet.imageUrl,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (context, error, stackTrace) {
-                                              return const Icon(Icons.pets, color: Colors.grey, size: 40);
-                                            },
-                                          ),
-                                        )
-                                      : const Icon(Icons.pets, color: Colors.grey, size: 40),
+                            child: pet.imageUrl.isNotEmpty
+                                ? ClipOval(
+                              child: Image.network(
+                                pet.imageUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return const Icon(Icons.pets, color: Colors.grey, size: 40);
+                                },
+                              ),
+                            )
+                                : const Icon(Icons.pets, color: Colors.grey, size: 40),
+                          ),
+                          // 대표 반려동물 별 아이콘 (우측 상단)
+                          if (isPrimary)
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
                                 ),
-                                // 대표 반려동물 별 아이콘 (우측 상단)
-                                if (isPrimary)
-                                  Positioned(
-                                    right: 0,
-                                    top: 0,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(4),
-                                      decoration: const BoxDecoration(
-                                        color: Colors.white,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.star,
-                                        color: Color(0xFFFFD700),
-                                        size: 20,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(width: 16),
-                            // 정보 영역
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text(
-                                        pet.name,
-                                        style: const TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      if (isPrimary) ...[
-                                        const SizedBox(width: 8),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFFFD700).withOpacity(0.2),
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: const Text(
-                                            "대표",
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              color: Color(0xFFFFD700),
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    "나이 : ${age}살",
-                                    style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    "품종 : ${pet.breed}",
-                                    style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
-                                  ),
-                                ],
+                                child: const Icon(
+                                  Icons.star,
+                                  color: Color(0xFFFFD700),
+                                  size: 20,
+                                ),
                               ),
                             ),
-                            // 팝업 메뉴 버튼
-                            PopupMenuButton<String>(
-                              onSelected: (value) async {
-                                if (value == 'edit') {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => PetRegistrationScreen(petToEdit: pet),
-                                    ),
-                                  );
-                                } else if (value == 'primary') {
-                                  await context.read<PetViewModel>().setPrimaryPet(pet.id);
-                                } else if (value == 'delete') {
-                                  _showDeleteDialog(context, pet);
-                                }
-                              },
-                              itemBuilder: (BuildContext context) {
-                                return [
-                                  const PopupMenuItem(
-                                    value: 'edit',
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.edit, color: Colors.grey),
-                                        SizedBox(width: 8),
-                                        Text("정보 수정"),
-                                      ],
-                                    ),
+                        ],
+                      ),
+                      const SizedBox(width: 16),
+                      // 정보 영역
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  pet.name,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
                                   ),
-                                  if (!isPrimary)
-                                    const PopupMenuItem(
-                                      value: 'primary',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.star_border, color: Color(0xFFFFD700)),
-                                          SizedBox(width: 8),
-                                          Text("대표 반려동물 설정"),
-                                        ],
+                                ),
+                                if (isPrimary) ...[
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFFD700).withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text(
+                                      "대표",
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Color(0xFFFFD700),
+                                        fontWeight: FontWeight.bold,
                                       ),
                                     ),
-                                  const PopupMenuItem(
-                                    value: 'delete',
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.delete_outline, color: Colors.red),
-                                        SizedBox(width: 8),
-                                        Text("삭제", style: TextStyle(color: Colors.red)),
-                                      ],
-                                    ),
                                   ),
-                                ];
-                              },
+                                ],
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              "나이 : ${age}살",
+                              style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              "품종 : ${pet.breed}",
+                              style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
                             ),
                           ],
                         ),
                       ),
-                    );
-                  },
-                ),
-                // 하단 + 버튼
-                Positioned(
-                  bottom: 20,
-                  right: 20,
-                  child: FloatingActionButton(
-                    onPressed: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const PetRegistrationScreen()));
-                    },
-                    backgroundColor: const Color(0xFFFFD700),
-                    child: const Icon(Icons.add, color: Colors.white),
+                      // 팝업 메뉴 버튼
+                      PopupMenuButton<String>(
+                        onSelected: (value) async {
+                          if (value == 'edit') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => PetRegistrationScreen(petToEdit: pet),
+                              ),
+                            );
+                          } else if (value == 'primary') {
+                            await context.read<PetViewModel>().setPrimaryPet(pet.id);
+                          } else if (value == 'delete') {
+                            _showDeleteDialog(context, pet);
+                          }
+                        },
+                        itemBuilder: (BuildContext context) {
+                          return [
+                            const PopupMenuItem(
+                              value: 'edit',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.edit, color: Colors.grey),
+                                  SizedBox(width: 8),
+                                  Text("정보 수정"),
+                                ],
+                              ),
+                            ),
+                            if (!isPrimary)
+                              const PopupMenuItem(
+                                value: 'primary',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.star_border, color: Color(0xFFFFD700)),
+                                    SizedBox(width: 8),
+                                    Text("대표 반려동물 설정"),
+                                  ],
+                                ),
+                              ),
+                            const PopupMenuItem(
+                              value: 'delete',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.delete_outline, color: Colors.red),
+                                  SizedBox(width: 8),
+                                  Text("삭제", style: TextStyle(color: Colors.red)),
+                                ],
+                              ),
+                            ),
+                          ];
+                        },
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              );
+            },
+          ),
+          // 하단 + 버튼
+          Positioned(
+            bottom: 20,
+            right: 20,
+            child: FloatingActionButton(
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const PetRegistrationScreen()));
+              },
+              backgroundColor: const Color(0xFFFFD700),
+              child: const Icon(Icons.add, color: Colors.white),
             ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -504,22 +504,22 @@ class _PetRegistrationScreenState extends State<PetRegistrationScreen> {
                               ),
                               child: _imageFile != null
                                   ? ClipOval(
-                                      child: Image.file(
-                                        _imageFile!,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    )
+                                child: Image.file(
+                                  _imageFile!,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
                                   : (_existingImageUrl != null && _existingImageUrl!.isNotEmpty
-                                      ? ClipOval(
-                                          child: Image.network(
-                                            _existingImageUrl!,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (context, error, stackTrace) {
-                                              return const Icon(Icons.pets, size: 60, color: Colors.grey);
-                                            },
-                                          ),
-                                        )
-                                      : const Icon(Icons.pets, size: 60, color: Colors.grey)),
+                                  ? ClipOval(
+                                child: Image.network(
+                                  _existingImageUrl!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return const Icon(Icons.pets, size: 60, color: Colors.grey);
+                                  },
+                                ),
+                              )
+                                  : const Icon(Icons.pets, size: 60, color: Colors.grey)),
                             ),
                             Positioned(
                               bottom: 0,
