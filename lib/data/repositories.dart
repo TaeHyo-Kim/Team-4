@@ -133,43 +133,62 @@ class SocialRepository {
     return snapshot.docs.map((doc) => doc.id).toSet();
   }
 
-  // 팔로우 실행 (트랜잭션으로 팔로잉/팔로워 수 동시 업데이트)
+  // 팔로우 실행 (안정성 강화 버전)
   Future<void> followUser({required String myUid, required String targetUid}) async {
     final myRef = _db.collection('users').doc(myUid);
     final targetRef = _db.collection('users').doc(targetUid);
-
     final followRef = myRef.collection('following').doc(targetUid);
     final followerRef = targetRef.collection('followers').doc(myUid);
 
-    return _db.runTransaction((transaction) async {
-      final check = await transaction.get(followRef);
-      if (check.exists) return;
+    try {
+      await _db.runTransaction((transaction) async {
+        // 읽기는 항상 쓰기보다 먼저!
+        final myDoc = await transaction.get(myRef);
+        final targetDoc = await transaction.get(targetRef);
+        final followDoc = await transaction.get(followRef);
 
-      transaction.set(followRef, {'createdAt': FieldValue.serverTimestamp()});
-      transaction.set(followerRef, {'createdAt': FieldValue.serverTimestamp()});
+        if (followDoc.exists) return; // 이미 팔로우 중이면 무시
+        if (!myDoc.exists || !targetDoc.exists) return;
 
-      transaction.update(myRef, {'stats.followingCount': FieldValue.increment(1)});
-      transaction.update(targetRef, {'stats.followerCount': FieldValue.increment(1)});
-    });
+        // 쓰기 작업
+        transaction.set(followRef, {'createdAt': FieldValue.serverTimestamp()});
+        transaction.set(followerRef, {'createdAt': FieldValue.serverTimestamp()});
+
+        // 내 정보 업데이트 (followingCount +1)
+        transaction.update(myRef, {'stats.followingCount': FieldValue.increment(1)});
+
+        // 상대방 정보 업데이트 (followerCount +1)
+        transaction.update(targetRef, {'stats.followerCount': FieldValue.increment(1)});
+      });
+    } catch (e) {
+      print("Follow Transaction Error: $e");
+      rethrow; // ViewModel에서 에러를 잡아 스낵바를 띄우게 함
+    }
   }
 
   // 언팔로우 실행
   Future<void> unfollowUser({required String myUid, required String targetUid}) async {
     final myRef = _db.collection('users').doc(myUid);
     final targetRef = _db.collection('users').doc(targetUid);
-
     final followRef = myRef.collection('following').doc(targetUid);
     final followerRef = targetRef.collection('followers').doc(myUid);
 
-    return _db.runTransaction((transaction) async {
-      final check = await transaction.get(followRef);
-      if (!check.exists) return;
+    await _db.runTransaction((transaction) async {
+      final followDoc = await transaction.get(followRef);
+      if (!followDoc.exists) return;
+
+      final myDoc = await transaction.get(myRef);
+      final targetDoc = await transaction.get(targetRef);
 
       transaction.delete(followRef);
       transaction.delete(followerRef);
 
-      transaction.update(myRef, {'stats.followingCount': FieldValue.increment(-1)});
-      transaction.update(targetRef, {'stats.followerCount': FieldValue.increment(-1)});
+      if (myDoc.exists) {
+        transaction.update(myRef, {'stats.followingCount': FieldValue.increment(-1)});
+      }
+      if (targetDoc.exists) {
+        transaction.update(targetRef, {'stats.followerCount': FieldValue.increment(-1)});
+      }
     });
   }
 }
