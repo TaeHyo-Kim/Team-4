@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
+  // 이미지 디자인에 맞춘 색상 상수
+  static const Color primaryGreen = Color(0xFF4CAF50); // 초록색 헤더
+  static const Color primaryOrange = Color(0xFFFF9800); // 오렌지색 네비게이션
+  
   static final ThemeData lightTheme = ThemeData(
     useMaterial3: true,
     colorScheme: ColorScheme.fromSeed(
-      seedColor: Colors.amber, // 메인 컬러
+      seedColor: primaryGreen,
       brightness: Brightness.light,
     ),
     scaffoldBackgroundColor: Colors.grey[50],
@@ -16,7 +20,7 @@ class AppTheme {
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.amber,
+        backgroundColor: primaryOrange,
         foregroundColor: Colors.white,
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
