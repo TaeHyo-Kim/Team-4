@@ -159,8 +159,7 @@ class _WalkScreenState extends State<WalkScreen> {
                     children: [
                       CircularProgressIndicator(color: Colors.white),
                       SizedBox(height: 10),
-                      Text(
-                          "위치를 찾는 중...", style: TextStyle(color: Colors.white)),
+                      Text("위치를 찾는 중...", style: TextStyle(color: Colors.white)),
                     ],
                   ),
                 ),
@@ -228,7 +227,6 @@ class _WalkScreenState extends State<WalkScreen> {
                 isPaused: vm.isPaused,
                 distanceMeters: vm.distance,
                 seconds: vm.seconds,
-                onPauseToggle: vm.togglePause,
                 onStop: () => _showStopDialog(context, vm),
                 onStart: () {}, // 무시
               ),
@@ -412,7 +410,6 @@ class WalkControls extends StatelessWidget {
   final double distanceMeters;
   final int seconds;
   final VoidCallback onStart;
-  final VoidCallback onPauseToggle;
   final VoidCallback onStop;
 
   const WalkControls({
@@ -422,7 +419,6 @@ class WalkControls extends StatelessWidget {
     required this.distanceMeters,
     required this.seconds,
     required this.onStart,
-    required this.onPauseToggle,
     required this.onStop,
   });
 
