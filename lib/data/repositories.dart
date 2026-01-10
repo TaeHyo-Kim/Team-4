@@ -69,6 +69,17 @@ class PetRepository {
     return snapshot.docs.map((doc) => PetModel.fromDocument(doc)).toList();
   }
 
+  // 내 반려동물 목록 실시간 스트림
+  Stream<List<PetModel>> petsStream(String userId) {
+    return _db
+        .collection('pets')
+        .where('ownerId', isEqualTo: userId)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => PetModel.fromDocument(doc))
+            .toList());
+  }
+
   // 반려동물 등록
   Future<void> createPet({
     required String userId,
@@ -341,11 +352,15 @@ class WalkRepository {
     // 공개 게시물인 경우에만 팔로워에게 알림 전송
     if (walk.visibility == 'public') {
       try {
+        debugPrint('공개 피드 저장됨, 알림 전송 시작: walkId=${docRef.id}, userId=${walk.userId}');
+        
         // 사용자 정보 가져오기
         final userDoc = await _db.collection('users').doc(walk.userId).get();
         if (userDoc.exists) {
           final userData = userDoc.data() as Map<String, dynamic>?;
           final userNickname = userData?['nickname'] as String? ?? '사용자';
+          
+          debugPrint('사용자 정보 확인: nickname=$userNickname');
           
           // 팔로워에게 피드 알림 전송
           await _notificationService.sendFeedNotification(
@@ -353,11 +368,18 @@ class WalkRepository {
             userNickname: userNickname,
             postId: docRef.id,
           );
+          
+          debugPrint('피드 알림 전송 완료');
+        } else {
+          debugPrint('사용자 문서를 찾을 수 없습니다: ${walk.userId}');
         }
-      } catch (e) {
-        print("피드 알림 전송 실패: $e");
+      } catch (e, stackTrace) {
+        debugPrint("피드 알림 전송 실패: $e");
+        debugPrint("스택 트레이스: $stackTrace");
         // 알림 전송 실패해도 산책 기록 저장은 성공으로 처리
       }
+    } else {
+      debugPrint('비공개 피드이므로 알림을 전송하지 않습니다: visibility=${walk.visibility}');
     }
   }
 

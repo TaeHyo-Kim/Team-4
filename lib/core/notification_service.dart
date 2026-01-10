@@ -323,6 +323,8 @@ class NotificationService {
     required String postId,
   }) async {
     try {
+      debugPrint('피드 알림 전송 시작: userId=$userId, userNickname=$userNickname, postId=$postId');
+      
       // 해당 사용자의 팔로워 목록 가져오기
       final followersSnapshot = await _db
           .collection('users')
@@ -330,9 +332,15 @@ class NotificationService {
           .collection('followers')
           .get();
 
-      if (followersSnapshot.docs.isEmpty) return;
+      debugPrint('팔로워 수: ${followersSnapshot.docs.length}명');
+
+      if (followersSnapshot.docs.isEmpty) {
+        debugPrint('팔로워가 없어 알림을 전송하지 않습니다.');
+        return;
+      }
 
       final batch = _db.batch();
+      int notificationCount = 0;
 
       // 각 팔로워에게 알림 생성
       for (final followerDoc in followersSnapshot.docs) {
@@ -350,13 +358,18 @@ class NotificationService {
           'read': false,
           'createdAt': FieldValue.serverTimestamp(),
         });
+        notificationCount++;
+        debugPrint('알림 생성: followerId=$followerId');
       }
 
+      debugPrint('배치 작업 시작: $notificationCount개의 알림 저장 시도');
       await batch.commit();
+      debugPrint('피드 알림 전송 완료: $notificationCount개의 알림이 팔로워들에게 전송되었습니다.');
 
       // 실제 푸시 알림은 Firebase Functions에서 처리합니다
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint("피드 알림 전송 실패: $e");
+      debugPrint("스택 트레이스: $stackTrace");
     }
   }
 

@@ -11,11 +11,13 @@ class SocialViewModel with ChangeNotifier {
   List<UserModel> _filteredUsers = [];
   Set<String> _followingIds = {};
   Set<String> _blockedIds = {};
+  List<UserModel> _blockedUserList = [];
 
   // 현재 검색어 상태 저장 (팔로우 토글 시 리스트 유지를 위함)
   String _currentSearchQuery = '';
 
   List<UserModel> get users => _filteredUsers;
+  List<UserModel> get blockedUserList => _blockedUserList;
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
@@ -33,11 +35,9 @@ class SocialViewModel with ChangeNotifier {
     try {
       _allUsers = await _repo.getAllUsers(myUid);
       _followingIds = await _repo.getMyFollowingIds(myUid);
-
       _blockedIds = await _repo.getBlockedUserIds(myUid);
-      // 초기 로드 시 검색어가 없으므로 팔로잉 중인 유저만 필터링
+      
       _applyFilter();
-
     } catch (e) {
       print("Social Data Load Error: $e");
     } finally {
@@ -46,7 +46,24 @@ class SocialViewModel with ChangeNotifier {
     }
   }
 
-  // 필터링 로직 수정 (차단된 유저는 안 보이게)
+  // 차단된 유저 상세 목록 불러오기 (설정 화면용)
+  Future<void> fetchBlockedUsers() async {
+    final myUid = _auth.currentUser?.uid;
+    if (myUid == null) return;
+
+    _isLoading = true;
+    notifyListeners();
+    try {
+      _blockedUserList = await _repo.getBlockedUsers(myUid);
+    } catch (e) {
+      debugPrint("Fetch Blocked Users Error: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // 필터링 로직 (차단된 유저는 검색에서 제외)
   void _applyFilter() {
     var baseUsers = _allUsers.where((u) => !_blockedIds.contains(u.uid));
 
@@ -58,7 +75,6 @@ class SocialViewModel with ChangeNotifier {
     }
   }
 
-  // View에서 호출하는 검색 메서드
   void searchUsers(String query) {
     _currentSearchQuery = query;
     _applyFilter();
@@ -71,14 +87,12 @@ class SocialViewModel with ChangeNotifier {
 
     final isFollowing = _followingIds.contains(targetUid);
 
-    // 낙관적 업데이트
     if (isFollowing) {
       _followingIds.remove(targetUid);
     } else {
       _followingIds.add(targetUid);
     }
 
-    // 상태 변경 후 리스트 즉시 갱신 (팔로우 취소 시 리스트에서 바로 사라지게 함)
     _applyFilter();
     notifyListeners();
 
@@ -89,8 +103,6 @@ class SocialViewModel with ChangeNotifier {
         await _repo.followUser(myUid: myUid, targetUid: targetUid);
       }
     } catch (e) {
-      print("Follow Error: $e");
-      // 에러 시 복구
       if (isFollowing) {
         _followingIds.add(targetUid);
       } else {
@@ -102,21 +114,36 @@ class SocialViewModel with ChangeNotifier {
     }
   }
 
-  // 차단 실행
+  // 차단 실행/해제 (프로필에서 호출)
   Future<void> toggleBlock(String targetUid) async {
     final myUid = _auth.currentUser?.uid;
     if (myUid == null) return;
 
     if (_blockedIds.contains(targetUid)) {
-      await _repo.unblockUser(myUid: myUid, targetUid: targetUid);
-      _blockedIds.remove(targetUid);
+      await unblockUser(targetUid);
     } else {
       await _repo.blockUser(myUid: myUid, targetUid: targetUid);
       _blockedIds.add(targetUid);
       _followingIds.remove(targetUid); // 차단 시 팔로우 해제 반영
+      _applyFilter();
+      notifyListeners();
     }
-    _applyFilter();
-    notifyListeners();
+  }
+
+  // 차단 해제 전용 (설정 화면 등에서 사용)
+  Future<void> unblockUser(String targetUid) async {
+    final myUid = _auth.currentUser?.uid;
+    if (myUid == null) return;
+
+    try {
+      await _repo.unblockUser(myUid: myUid, targetUid: targetUid);
+      _blockedIds.remove(targetUid);
+      _blockedUserList.removeWhere((u) => u.uid == targetUid);
+      _applyFilter();
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Unblock Error: $e");
+    }
   }
 
   bool isFollowing(String uid) => _followingIds.contains(uid);

@@ -15,7 +15,6 @@ import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
-
 class WalkViewModel with ChangeNotifier {
   final WalkRepository _repo = WalkRepository();
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -28,6 +27,7 @@ class WalkViewModel with ChangeNotifier {
   GoogleMapController? _mapController;
   Timer? _inactivityTimer;
   bool _isUserInteracting = false;
+
   bool _isWalking = false;
   bool _isPaused = false;
   int _seconds = 0;
@@ -43,140 +43,22 @@ class WalkViewModel with ChangeNotifier {
   Timer? _timer;
 
   int walkState = 0; // 0: 홈, 1: 산책 중, 2: 요약(5번), 3: 후기 작성(6번)
-  List<Map<String, dynamic>> myPets = [];
-  Map<String, dynamic>? selectedPet;
+  List<Map<String, dynamic>> myPets = []; // {id, name, isPrimary, ...} 형태
+  Map<String, dynamic>? selectedPet; // 단일 선택 (기존 호환성 유지)
   Map<String, dynamic>? recentWalk;
+  Set<String> selectedPetIds = {}; // 여러 반려동물 선택용
+  StreamSubscription<QuerySnapshot>? _recentWalkSubscription; // 최근 산책 기록 실시간 스트림
+  StreamSubscription<QuerySnapshot>? _petsSubscription; // 반려동물 목록 실시간 스트림
 
+  // 후기 작성 관련 필드
   List<XFile> reviewImages = [];
   int currentImageIndex = 0;
   String selectedEmoji = '👍'; // 기본 이모지
+  final TextEditingController reviewController = TextEditingController();
+  DateTime? endTime; // 요약 화면 표기용
 
   // 배율 변경: 1:12,500은 줌 레벨 약 16.5 ~ 17.0
   final double _defaultZoom = 16.5;
-
-// [추가] 초기 데이터 로드 통합 함수
-  Future<void> initWalkScreen() async {
-    await checkLocationPermission();
-    await fetchMyPets();
-    await fetchRecentWalk();
-    await fetchCurrentLocation();
-  }
-
-  // [수정] 펫 선택 시 ViewModel에서 상태 관리
-  void selectPet(Map<String, dynamic>? pet) {
-    selectedPet = pet;
-    notifyListeners();
-  }
-
-  // [수정] 화면 상태 전환 함수
-  void setWalkState(int state) {
-    walkState = state;
-    notifyListeners();
-  }
-
-  // [추가] 최근 산책 기록 로드 (userId 기준 최신 1건)
-  Future<void> fetchRecentWalk() async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-    final snapshot = await FirebaseFirestore.instance
-        .collection('walks')
-        .where('userId', isEqualTo: uid)
-        .orderBy('endTime', descending: true)
-        .limit(1)
-        .get();
-    if (snapshot.docs.isNotEmpty) {
-      recentWalk = snapshot.docs.first.data();
-      notifyListeners();
-    }
-  }
-
-  // [수정] 진입 시 위치 권한 체크 (항상 허용이 아닐 경우 팝업) [새 요구사항]
-  Future<void> checkLocationPermission() async {
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission != LocationPermission.always) {
-      await Geolocator.requestPermission();
-    }
-  }
-
-  // [수정 및 추가] 펫 이미지를 2배 크기 원형 마커로 변환하는 함수
-  Future<BitmapDescriptor> getPetMarkerIcon(String? imageUrl) async {
-    if (imageUrl == null || imageUrl.isEmpty) {
-      // 이미지가 없을 경우 주황색 기본 마커 반환
-      return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
-    }
-
-    try {
-      // 1. 이미지 다운로드
-      final http.Response response = await http.get(Uri.parse(imageUrl));
-      if (response.statusCode != 200) throw Exception("이미지 로드 실패");
-
-      final Uint8List imageBytes = response.bodyBytes;
-
-      // 2. 이미지 가공 (원형 절삭 및 리사이징)
-      // targetWidth/Height를 150~200 정도로 설정하여 2배 크기 효과를 줌
-      final ui.Codec codec = await ui.instantiateImageCodec(
-        imageBytes,
-        targetWidth: 160,
-        targetHeight: 160,
-      );
-      final ui.FrameInfo fi = await codec.getNextFrame();
-      final ui.Image image = fi.image;
-
-      final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
-      final Canvas canvas = Canvas(pictureRecorder);
-      final Paint paint = Paint()..isAntiAlias = true;
-      final double radius = 80.0; // 반지름 (가로세로 160의 절반)
-
-      // 원형 클리핑 및 이미지 그리기
-      canvas.drawCircle(Offset(radius, radius), radius, paint);
-      paint.blendMode = BlendMode.srcIn;
-      canvas.drawImage(image, Offset.zero, paint);
-
-      // 3. 최종 비트맵 변환
-      final ui.Image finalImage = await pictureRecorder.endRecording().toImage(160, 160);
-      final ByteData? byteData = await finalImage.toByteData(format: ui.ImageByteFormat.png);
-      final Uint8List finalBytes = byteData!.buffer.asUint8List();
-
-      return BitmapDescriptor.fromBytes(finalBytes);
-    } catch (e) {
-      debugPrint("마커 생성 에러: $e");
-      return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
-    }
-  }
-
-  // [수정] 최종 저장 로직: emoji와 photoUrls를 명확히 매핑
-  Future<void> stopWalkAndSave(String memo) async {
-    final userId = _auth.currentUser?.uid;
-    if (userId == null) return;
-
-    // Firebase Storage 업로드 로직을 거친 후의 URL 리스트라고 가정합니다.
-    List<String> photoUrls = reviewImages.map((file) => file.path).toList();
-
-    final record = {
-      'userId': userId,
-      'petIds': [selectedPet?['id'] ?? 'temp_pet'],
-      'startTime': Timestamp.fromDate(_startTime ?? DateTime.now()),
-      'endTime': Timestamp.fromDate(DateTime.now()),
-      'distance': _distance / 1000.0,
-      'duration': _seconds,
-      'emoji': selectedEmoji, // 요구사항 반영: 선택한 이모지 저장
-      'photoUrls': photoUrls, // 요구사항 반영: 사진 URL 리스트 저장
-      'memo': memo,
-      'encodedPath': jsonEncode(_route.map((e) => {'lat': e.latitude, 'lng': e.longitude}).toList()),
-      'visibility': 'public',
-    };
-
-    try {
-      await FirebaseFirestore.instance.collection('walks').add(record); // 컬렉션 명 'walks' 확인
-      await WalkDbHelper.instance.clearCache();
-      walkState = 0; // 홈으로 복귀
-      reviewImages = []; // 이미지 리스트 초기화
-      notifyListeners();
-    } catch (e) {
-      debugPrint("저장 에러: $e");
-      rethrow;
-    }
-  }
 
   // ------------------------------------------------------------------------
   // Getters
@@ -188,30 +70,15 @@ class WalkViewModel with ChangeNotifier {
   List<LatLng> get route => _route;
   LatLng? get currentPosition => _currentPosition;
   bool get isUserInteracting => _isUserInteracting;
+  DateTime? get startTime => _startTime;
+  
+  int get totalDots => reviewImages.isEmpty ? 1 : reviewImages.length;
 
   void setMapController(GoogleMapController controller) {
     _mapController = controller;
     if (_currentPosition != null) {
       moveToCurrentLocation();
     }
-  }
-
-  // 내 반려동물 목록 가져오기 (isPrimary 기준 정렬)
-  Future<void> fetchMyPets() async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-
-    final snapshot = await FirebaseFirestore.instance
-        .collection('pets')
-        .where('ownerId', isEqualTo: uid)
-        .get();
-
-    myPets = snapshot.docs.map((doc) => doc.data()).toList();
-    if (myPets.isNotEmpty) {
-      // isPrimary가 true인 동물을 기본값으로 설정
-      selectedPet = myPets.firstWhere((p) => p['isPrimary'] == true, orElse: () => myPets.first);
-    }
-    notifyListeners();
   }
 
   // 사용자가 지도를 터치했을 때 호출
@@ -262,35 +129,39 @@ class WalkViewModel with ChangeNotifier {
   // ------------------------------------------------------------------------
   // 1. 산책 시작
   // ------------------------------------------------------------------------
-  // [수정] 산책 시작 함수: 화면 전환과 카메라 이동 통합 [요구사항 3]
   Future<void> startWalk(List<String> petIds) async {
     if (_isWalking) return;
     bool hasPermission = await _checkPermission();
     if (!hasPermission) throw Exception("위치 권한이 필요합니다.");
 
-    // 변수 초기화
+    // 초기화
     _isWalking = true;
     _isPaused = false;
     _seconds = 0;
     _distance = 0.0;
     _route = [];
-    _startTime = DateTime.now();
+    _selectedPetIds = petIds;
+    _startTime = DateTime.now(); // 시작 시간 기록
 
-    // 현재 위치 설정 및 카메라 이동
-    if (_currentPosition == null) {
+    // 현재 위치를 시작 위치로 고정 (null일 경우 대비 로직 포함)
+    if (_currentPosition != null) {
+      _startPosition = _currentPosition;
+    } else {
+      // 만약 아직 위치를 못 잡았다면 즉시 가져오기 시도
       Position p = await Geolocator.getCurrentPosition();
-      _currentPosition = LatLng(p.latitude, p.longitude);
+      _startPosition = LatLng(p.latitude, p.longitude);
+      _currentPosition = _startPosition;
     }
-    _startPosition = _currentPosition;
 
     _startTimer();
     _startLocationTracking();
-
-    // 산책 중 상태(1)로 변경 및 지도 중심 맞춤
+    moveToCurrentLocation(); // 시작 시 중심 맞춤
+    
+    // 산책 중 상태(1)로 변경
     walkState = 1;
-    moveToCurrentLocation();
     notifyListeners();
   }
+
 
   void _startLocationTracking() {
     const locationSettings = LocationSettings(
@@ -340,9 +211,10 @@ class WalkViewModel with ChangeNotifier {
   Future<void> stopWalk({
     String memo = '',
     String emoji = '🐕',
-    String visibility = 'public'
+    String visibility = 'public',
+    List<String> photoUrls = const [],
   }) async {
-    if (!_isWalking) return;
+    if (!_isWalking && walkState != 2) return;
 
     final userId = _auth.currentUser?.uid;
     if (userId == null) return;
@@ -354,7 +226,7 @@ class WalkViewModel with ChangeNotifier {
     _isPaused = false;
 
     // 1. 데이터 가공
-    final endTime = DateTime.now();
+    final walkEndTime = endTime ?? DateTime.now();
     final double distanceKm = _distance / 1000.0; // 미터 -> km 변환
     final double calories = _calculateCalories(_distance); // 칼로리 계산
 
@@ -376,7 +248,7 @@ class WalkViewModel with ChangeNotifier {
       userId: userId,
       petIds: _selectedPetIds,
       startTime: Timestamp.fromDate(_startTime ?? DateTime.now()),
-      endTime: Timestamp.fromDate(endTime),
+      endTime: Timestamp.fromDate(walkEndTime),
       duration: _seconds,
       distance: distanceKm,
       calories: calories,
@@ -387,8 +259,7 @@ class WalkViewModel with ChangeNotifier {
       memo: memo,
       emoji: emoji,
       visibility: visibility,
-      photoUrls: [],
-      // 이미지는 별도 업로드 로직 필요 (일단 빈 리스트)
+      photoUrls: photoUrls,
       likeCount: 0,
     );
 
@@ -410,46 +281,6 @@ class WalkViewModel with ChangeNotifier {
     }
   }
 
-  // 이미지 선택 (최대 3장)
-  Future<void> pickImage() async {
-    final picker = ImagePicker();
-    final List<XFile> images = await picker.pickMultiImage();
-    if (images.isNotEmpty) {
-      // 기존 리스트에 추가 (누적식)
-      reviewImages.addAll(images);
-      notifyListeners();
-    }
-  }
-
-  // [추가] 특정 인덱스의 이미지를 삭제하는 기능 [요구사항 7]
-  void removeImage(int index) {
-    if (index >= 0 && index < reviewImages.length) {
-      reviewImages.removeAt(index);
-      // 삭제 후 인덱스 범위 초과 방지
-      if (currentImageIndex >= reviewImages.length && reviewImages.isNotEmpty) {
-        currentImageIndex = reviewImages.length - 1;
-      } else if (reviewImages.isEmpty) {
-        currentImageIndex = 0;
-      }
-      notifyListeners();
-    }
-  }
-
-// [수정] 인디케이터 개수 로직: 이미지 개수에 맞춰 유동적으로 변화 [요구사항 1, 2]
-  int get totalDots => reviewImages.isEmpty ? 1 : reviewImages.length;
-
-  // 최종 저장 (이미지 스토리지 업로드 포함)
-  Future<void> uploadAndSaveRecord(String memo) async {
-    List<String> photoUrls = [];
-    // Firebase Storage 업로드 로직 (생략) 후 URL 리스트 확보
-
-    // 기존 stopWalk 로직에 photoUrls와 selectedEmoji 추가하여 저장
-    // ...
-    await WalkDbHelper.instance.clearCache();
-    walkState = 0; // 홈으로 복귀
-    notifyListeners();
-  }
-
   // ------------------------------------------------------------------------
   // Helper: 칼로리 계산 (간단 공식)
   // ------------------------------------------------------------------------
@@ -462,11 +293,10 @@ class WalkViewModel with ChangeNotifier {
   // ------------------------------------------------------------------------
   // 내부 로직
   // ------------------------------------------------------------------------
-  // [수정] 타이머 함수: walkState가 1(산책중)일 때만 작동하도록 하여 종료 시 자동 정지 [요구사항 5]
   void _startTimer() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (walkState == 1 && !_isPaused) { // 산책 완료(2)나 후기(3) 단계에서는 멈춤
+      if (!_isPaused) {
         _seconds++;
         notifyListeners();
       }
@@ -476,16 +306,168 @@ class WalkViewModel with ChangeNotifier {
   // 보정 로직을 위한 설정값
   final double _accuracyThreshold = 20.0; // 20m 이상 오차 무시
 
+  // 후기 작성 관련 메서드
+  Future<void> pickImage() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      reviewImages.add(image);
+      currentImageIndex = reviewImages.length - 1;
+      notifyListeners();
+    }
+  }
+
+  void removeImage(int index) {
+    if (index >= 0 && index < reviewImages.length) {
+      reviewImages.removeAt(index);
+      if (currentImageIndex >= reviewImages.length && currentImageIndex > 0) {
+        currentImageIndex--;
+      } else if (reviewImages.isEmpty) {
+        currentImageIndex = 0;
+      }
+      notifyListeners();
+    }
+  }
+
+  void setCurrentImageIndex(int index) {
+    if (index >= 0 && index < reviewImages.length) {
+      currentImageIndex = index;
+      notifyListeners();
+    }
+  }
+
+  void setCurrentImageIndexIncrement() {
+    if (currentImageIndex < reviewImages.length - 1) {
+      currentImageIndex++;
+      notifyListeners();
+    }
+  }
+
+  void setCurrentImageIndexDecrement() {
+    if (currentImageIndex > 0) {
+      currentImageIndex--;
+      notifyListeners();
+    }
+  }
+
+  void setSelectedEmoji(String emoji) {
+    selectedEmoji = emoji;
+    notifyListeners();
+  }
+
+  // [수정 및 추가] 펫 이미지를 2배 크기 원형 마커로 변환하는 함수
+  Future<BitmapDescriptor> getPetMarkerIcon(String? imageUrl) async {
+    if (imageUrl == null || imageUrl.isEmpty) {
+      // 이미지가 없을 경우 주황색 기본 마커 반환
+      return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
+    }
+
+    try {
+      // 1. 이미지 다운로드
+      final http.Response response = await http.get(Uri.parse(imageUrl));
+      if (response.statusCode != 200) throw Exception("이미지 로드 실패");
+
+      final Uint8List imageBytes = response.bodyBytes;
+
+      // 2. 이미지 가공 (원형 절삭 및 리사이징)
+      // targetWidth/Height를 150~200 정도로 설정하여 2배 크기 효과를 줌
+      final ui.Codec codec = await ui.instantiateImageCodec(
+        imageBytes,
+        targetWidth: 160,
+        targetHeight: 160,
+      );
+      final ui.FrameInfo fi = await codec.getNextFrame();
+      final ui.Image image = fi.image;
+
+      final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
+      final Canvas canvas = Canvas(pictureRecorder);
+      final Paint paint = Paint()..isAntiAlias = true;
+      final double radius = 80.0; // 반지름 (가로세로 160의 절반)
+
+      // 원형 클리핑 및 이미지 그리기
+      canvas.drawCircle(Offset(radius, radius), radius, paint);
+      paint.blendMode = BlendMode.srcIn;
+      canvas.drawImage(image, Offset.zero, paint);
+
+      // 3. 최종 비트맵 변환
+      final ui.Image finalImage = await pictureRecorder.endRecording().toImage(160, 160);
+      final ByteData? byteData = await finalImage.toByteData(format: ui.ImageByteFormat.png);
+      final Uint8List finalBytes = byteData!.buffer.asUint8List();
+
+      return BitmapDescriptor.fromBytes(finalBytes);
+    } catch (e) {
+      debugPrint("마커 생성 에러: $e");
+      return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
+    }
+  }
+
+  // [수정] 산책 종료 시 시간 기록 및 상태 변경
+  void finishWalk() {
+    endTime = DateTime.now();
+    _isWalking = false; // 산책 버튼 잠김 해제의 핵심
+    _timer?.cancel();
+    _positionStream?.cancel();
+    walkState = 2; // 요약 화면으로 이동
+    notifyListeners();
+  }
+
+  // 산책 종료 및 저장 (후기 포함)
+  Future<void> stopWalkAndSave(String memo) async {
+    if (!_isWalking && walkState != 2) return;
+
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return;
+
+    // 이미지 업로드
+    List<String> photoUrls = [];
+    if (reviewImages.isNotEmpty) {
+      final storage = FirebaseStorage.instance;
+      for (final imageFile in reviewImages) {
+        try {
+          final ref = storage
+              .ref()
+              .child('walks/${userId}/${DateTime.now().millisecondsSinceEpoch}_${imageFile.name}');
+          await ref.putFile(File(imageFile.path));
+          final url = await ref.getDownloadURL();
+          photoUrls.add(url);
+        } catch (e) {
+          debugPrint("이미지 업로드 실패: $e");
+        }
+      }
+    }
+
+    // stopWalk 호출하여 저장
+    await stopWalk(
+      memo: memo,
+      emoji: selectedEmoji,
+      visibility: 'public',
+      photoUrls: photoUrls,
+    );
+
+    // 상태 초기화
+    walkState = 0; // 홈으로 복귀
+    reviewImages.clear();
+    currentImageIndex = 0;
+    reviewController.clear();
+    selectedEmoji = '👍';
+    endTime = null;
+    notifyListeners();
+  }
+
   void _saveToLocalCache(List<LatLng> points) {
     // SharedPreferences나 sqflite에 현재 경로를 임시 저장하는 로직을 여기에 구현합니다.
     // 이는 네트워크 단절 후 앱이 강제 종료되었을 때 데이터를 보호합니다.
   }
+
 
   @override
   void dispose() {
     _inactivityTimer?.cancel();
     _positionStream?.cancel();
     _timer?.cancel();
+    _recentWalkSubscription?.cancel();
+    _petsSubscription?.cancel();
+    reviewController.dispose();
     super.dispose();
   }
 
@@ -499,4 +481,265 @@ class WalkViewModel with ChangeNotifier {
     }
     return permission != LocationPermission.deniedForever;
   }
+
+  // [추가] 초기 데이터 로드 통합 함수
+  Future<void> initWalkScreen() async {
+    await checkLocationPermission();
+    await fetchCurrentLocation();
+
+    // 반려동물 목록 실시간 스트림 설정
+    setupPetsStream();
+
+    // 최근 산책 기록 실시간 스트림 설정
+    setupRecentWalkStream();
+
+    // 위치 추적은 산책이 시작될 때만 시작하도록 변경
+    // (initWalkScreen에서는 위치 추적을 시작하지 않음)
+  }
+
+  // [수정] 진입 시 위치 권한 체크 (항상 허용이 아닐 경우 팝업)
+  Future<void> checkLocationPermission() async {
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission != LocationPermission.always) {
+      await Geolocator.requestPermission();
+    }
+  }
+
+  // 내 반려동물 목록 가져오기 (isPrimary 기준 정렬) - 단발성
+  Future<void> fetchMyPets() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('pets')
+          .where('ownerId', isEqualTo: uid)
+          .get();
+
+      // 문서 ID도 함께 저장
+      myPets = snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id; // 문서 ID 추가
+        return data;
+      }).toList();
+
+      _updatePetsList();
+    } catch (e) {
+      debugPrint("반려동물 목록 로드 실패: $e");
+    }
+  }
+
+  // 반려동물 목록 업데이트 및 정렬
+  void _updatePetsList() {
+    // isPrimary가 true인 동물을 우선 정렬
+    myPets.sort((a, b) {
+      final aPrimary = a['isPrimary'] == true ? 1 : 0;
+      final bPrimary = b['isPrimary'] == true ? 1 : 0;
+      return bPrimary.compareTo(aPrimary);
+    });
+
+    if (myPets.isNotEmpty) {
+      // 대표 반려동물을 기본값으로 설정
+      selectedPet = myPets.firstWhere((p) => p['isPrimary'] == true, orElse: () => myPets.first);
+      
+      // 대표 반려동물이 선택되지 않은 경우에만 자동으로 선택된 상태로 설정
+      if (selectedPetIds.isEmpty) {
+        final primaryPetId = selectedPet?['id'] as String?;
+        if (primaryPetId != null) {
+          selectedPetIds = {primaryPetId};
+        }
+      } else {
+        // 선택된 반려동물이 삭제되었는지 확인하고, 삭제되었으면 대표 반려동물로 변경
+        final existingSelectedIds = selectedPetIds.where((id) {
+          return myPets.any((pet) => pet['id'] == id);
+        }).toSet();
+        
+        if (existingSelectedIds.isEmpty && myPets.isNotEmpty) {
+          final primaryPetId = selectedPet?['id'] as String?;
+          if (primaryPetId != null) {
+            selectedPetIds = {primaryPetId};
+          }
+        } else {
+          selectedPetIds = existingSelectedIds;
+        }
+      }
+    } else {
+      // 반려동물이 없으면 선택도 초기화
+      selectedPet = null;
+      selectedPetIds = {};
+    }
+    notifyListeners();
+  }
+
+  // 반려동물 목록 실시간 스트림 설정
+  void setupPetsStream() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    // 기존 스트림이 있으면 취소
+    _petsSubscription?.cancel();
+
+    debugPrint('반려동물 목록 실시간 스트림 설정: $uid');
+
+    // 실시간 스트림 설정
+    _petsSubscription = FirebaseFirestore.instance
+        .collection('pets')
+        .where('ownerId', isEqualTo: uid)
+        .snapshots()
+        .listen(
+      (snapshot) {
+        debugPrint('반려동물 목록 업데이트: ${snapshot.docs.length}개');
+        
+        // 문서 ID도 함께 저장
+        myPets = snapshot.docs.map((doc) {
+          final data = doc.data();
+          data['id'] = doc.id; // 문서 ID 추가
+          return data;
+        }).toList();
+
+        _updatePetsList();
+      },
+      onError: (error) {
+        debugPrint('반려동물 목록 스트림 오류: $error');
+      },
+    );
+  }
+
+  // [추가] 최근 산책 기록 로드 (userId 기준 최신 1건) - 단발성
+  Future<void> fetchRecentWalk() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('walks')
+          .where('userId', isEqualTo: uid)
+          .orderBy('endTime', descending: true)
+          .limit(1)
+          .get();
+      if (snapshot.docs.isNotEmpty) {
+        recentWalk = snapshot.docs.first.data();
+      } else {
+        recentWalk = null;
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint("최근 산책 기록 로드 실패: $e");
+      // 인덱스 오류일 수 있으므로 orderBy 없이 재시도
+      try {
+        final snapshot = await FirebaseFirestore.instance
+            .collection('walks')
+            .where('userId', isEqualTo: uid)
+            .limit(1)
+            .get();
+        if (snapshot.docs.isNotEmpty) {
+          // endTime 기준으로 정렬
+          final sorted = snapshot.docs.toList();
+          sorted.sort((a, b) {
+            final aEndTime = (a.data()['endTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+            final bEndTime = (b.data()['endTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+            return bEndTime.compareTo(aEndTime);
+          });
+          recentWalk = sorted.first.data();
+        } else {
+          recentWalk = null;
+        }
+        notifyListeners();
+      } catch (e2) {
+        debugPrint("최근 산책 기록 재시도 실패: $e2");
+      }
+    }
+  }
+
+  // [추가] 최근 산책 기록 실시간 스트림 설정
+  void setupRecentWalkStream() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    // 기존 스트림이 있으면 취소
+    _recentWalkSubscription?.cancel();
+
+    // 실시간 스트림 설정
+    _recentWalkSubscription = FirebaseFirestore.instance
+        .collection('walks')
+        .where('userId', isEqualTo: uid)
+        .orderBy('endTime', descending: true)
+        .limit(1)
+        .snapshots()
+        .listen(
+      (snapshot) {
+        if (snapshot.docs.isNotEmpty) {
+          recentWalk = snapshot.docs.first.data();
+        } else {
+          recentWalk = null;
+        }
+        notifyListeners();
+      },
+      onError: (error) {
+        debugPrint('최근 산책 기록 스트림 오류: $error');
+        // 인덱스 오류일 수 있으므로 orderBy 없이 재시도
+        _setupRecentWalkStreamWithoutOrderBy();
+      },
+    );
+  }
+
+  // orderBy 없이 스트림 설정 (인덱스 오류 대비)
+  void _setupRecentWalkStreamWithoutOrderBy() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    _recentWalkSubscription?.cancel();
+
+    _recentWalkSubscription = FirebaseFirestore.instance
+        .collection('walks')
+        .where('userId', isEqualTo: uid)
+        .snapshots()
+        .listen(
+      (snapshot) {
+        if (snapshot.docs.isNotEmpty) {
+          // endTime 기준으로 정렬
+          final sorted = snapshot.docs.toList();
+          sorted.sort((a, b) {
+            final aEndTime = (a.data()['endTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+            final bEndTime = (b.data()['endTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+            return bEndTime.compareTo(aEndTime);
+          });
+          recentWalk = sorted.first.data();
+        } else {
+          recentWalk = null;
+        }
+        notifyListeners();
+      },
+      onError: (error) {
+        debugPrint('최근 산책 기록 스트림 재시도 오류: $error');
+      },
+    );
+  }
+
+  // 반려동물 선택/해제 토글
+  void togglePetSelection(String petId) {
+    if (selectedPetIds.contains(petId)) {
+      selectedPetIds.remove(petId);
+    } else {
+      selectedPetIds.add(petId);
+    }
+    notifyListeners();
+  }
+
+  // 반려동물이 선택되어 있는지 확인
+  bool isPetSelected(String petId) {
+    return selectedPetIds.contains(petId);
+  }
+
+  // [수정] 펫 선택 시 ViewModel에서 상태 관리
+  void selectPet(Map<String, dynamic>? pet) {
+    selectedPet = pet;
+    notifyListeners();
+  }
+
+  // [수정] 화면 상태 전환 함수
+  void setWalkState(int state) {
+    walkState = state;
+    notifyListeners();
+  }
+
 }
