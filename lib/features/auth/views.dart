@@ -296,7 +296,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF2ECC71),
+        backgroundColor: const Color(0xFF4CAF50),
         title: const Text("프로필", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         elevation: 0,
         actions: [
@@ -463,7 +463,7 @@ class SettingsScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF2ECC71),
+        backgroundColor: const Color(0xFF4CAF50),
         title: const Text("설정", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         elevation: 0,
         actions: [IconButton(icon: const Icon(Icons.menu), onPressed: () {})],
