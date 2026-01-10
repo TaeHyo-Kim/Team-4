@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'viewmodels.dart';
 import '../auth/models.dart';
-import '../profile/views.dart';
 
 class SocialScreen extends StatefulWidget {
   const SocialScreen({super.key});
@@ -188,19 +187,26 @@ class OtherUserProfileView extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text("${user.nickname}님의 프로필",
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text("프로필", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF4CAF50),
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.block, color: Colors.white),
+            onPressed: () => _showBlockDialog(context, socialVM),
+          ),
+        ],
       ),
       body: Column(
         children: [
-          // 1. 유저 정보 상단 (이미지, 이름, 팔로우 버튼)
+          // 1. [이미지 참고] 프로필 상단 정보 레이아웃
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 35, 15, 25),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
+                // 프로필 이미지 (회색 바탕에 사람 아이콘)
                 CircleAvatar(
                   radius: 45,
                   backgroundColor: Colors.grey[200],
@@ -212,47 +218,102 @@ class OtherUserProfileView extends StatelessWidget {
                       : null,
                 ),
                 const SizedBox(width: 15),
+                // 텍스트 정보 영역
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(user.nickname,
-                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 4),
-                      Text(user.bio ?? "안녕하세요!",
-                          style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                      Text(user.bio ?? "",
+                          style: const TextStyle(color: Colors.grey, fontSize: 13),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 8),
-                      // 통계 정보 (공통 컴포넌트 사용)
-                      UserStatsRow(
-                        userId: user.uid,
-                        postCount: user.stats.postCount,
-                        followingCount: user.stats.followingCount,
-                        followerCount: user.stats.followerCount,
+                      // 게시물 / 팔로우 / 팔로잉
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Row(
+                          children: [
+                            Text("게시물 ${user.stats.postCount}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                            const SizedBox(width: 10),
+                            Text("팔로우 ${user.stats.followingCount}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                            const SizedBox(width: 10),
+                            Text("팔로워 ${user.stats.followerCount}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                          ],
+                        ),
                       ),
                     ],
                   ),
                 ),
-                // [변경] 프로필 편집 버튼 대신 팔로우/언팔로우 버튼
+                const SizedBox(width: 8),
+                // [변경] 팔로우/팔로잉 버튼 (이미지의 '프로필 편집' 버튼 스타일)
                 ElevatedButton(
                   onPressed: () => socialVM.toggleFollow(user.uid),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: isFollowing ? Colors.grey[300] : Colors.amber,
+                    // 팔로잉 중이면 연한 회색, 아니면 이미지와 같은 파란색(0xFF2196F3)
+                    backgroundColor: isFollowing ? Colors.grey[300] : const Color(0xFF2196F3),
                     foregroundColor: isFollowing ? Colors.black87 : Colors.white,
+                    elevation: 1,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                   child: Text(isFollowing ? "팔로잉" : "팔로우",
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
           ),
-          const Divider(),
+          const Divider(thickness: 1, color: Colors.black12, height: 1),
 
-          // 2. 해당 유저의 산책 기록 리스트 (필요 시 추가 구현)
+          // 2. 하단 영역 (산책 기록 등)
           const Expanded(
             child: Center(
-              child: Text("기능 준비 중입니다.", style: TextStyle(color: Colors.grey)),
+              child: Text(
+                "아직 산책 기록이 없습니다.",
+                style: TextStyle(
+                  color: Colors.black38,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showBlockDialog(BuildContext context, SocialViewModel vm) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("${user.nickname}님 차단"),
+        content: const Text("이 사용자를 차단하시겠습니까? 차단하면 서로의 프로필을 볼 수 없으며 팔로우가 해제됩니다."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("취소")),
+          TextButton(
+            onPressed: () async {
+              try {
+                // [수정] 로딩 표시나 비활성화를 위해 버튼 클릭 시 처리
+                await vm.toggleBlock(user.uid);
+                if (ctx.mounted) Navigator.pop(ctx); // 다이얼로그 닫기
+                if (context.mounted) Navigator.pop(context); // 프로필 화면 나가기
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("사용자를 차단했습니다.")),
+                );
+              } catch (e) {
+                if (ctx.mounted) Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("차단 중 오류가 발생했습니다: $e")),
+                );
+              }
+            },
+            child: const Text("차단", style: TextStyle(color: Colors.red)),
           ),
         ],
       ),

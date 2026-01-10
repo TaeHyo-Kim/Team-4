@@ -239,6 +239,60 @@ class SocialRepository {
       }
     });
   }
+
+  // SocialRepository 클래스 내에 추가
+  // 유저 차단 (안정성 강화)
+  Future<void> blockUser({required String myUid, required String targetUid}) async {
+    final myRef = _db.collection('users').doc(myUid);
+
+    // 1. 내 차단 목록에 추가 (성공 시 차단됨)
+    await myRef.collection('blockedUsers').doc(targetUid).set({
+      'blockedAt': FieldValue.serverTimestamp(),
+    });
+
+    // 2. 내가 상대방을 팔로우하고 있었다면 해제 (내 권한 내에서 가능)
+    try {
+      await unfollowUser(myUid: myUid, targetUid: targetUid);
+    } catch (e) {
+      // 팔로우 중이 아니었거나 에러가 나도 차단 자체는 진행되도록 무시
+      print("Block-Unfollow error: $e");
+    }
+  }
+
+  // 유저 차단 해제
+  Future<void> unblockUser({required String myUid, required String targetUid}) async {
+    await _db
+        .collection('users')
+        .doc(myUid)
+        .collection('blockedUsers')
+        .doc(targetUid)
+        .delete();
+  }
+
+  // 차단된 유저 ID 목록 조회
+  Future<Set<String>> getBlockedUserIds(String myUid) async {
+    final snapshot = await _db
+        .collection('users')
+        .doc(myUid)
+        .collection('blockedUsers')
+        .get();
+    return snapshot.docs.map((doc) => doc.id).toSet();
+  }
+
+  // 차단된 유저 상세 정보 목록 조회 (관리 화면용)
+  Future<List<UserModel>> getBlockedUsers(String myUid) async {
+    final ids = await getBlockedUserIds(myUid);
+    if (ids.isEmpty) return [];
+
+    // IDs가 많을 경우 10개씩 끊어서 처리해야 함(Firestore limit)
+    // 여기서는 간단하게 개별 조회 후 합치는 방식으로 설명
+    List<UserModel> users = [];
+    for (String id in ids) {
+      final doc = await _db.collection('users').doc(id).get();
+      if (doc.exists) users.add(UserModel.fromDocument(doc));
+    }
+    return users;
+  }
 }
 
 // -----------------------------------------------------------------------------

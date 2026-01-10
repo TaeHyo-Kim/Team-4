@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'models.dart';
 import 'viewmodels.dart';
+import '../auth/models.dart';
 import '../pet/views.dart';
 import '../../data/repositories.dart';
 import '../walk/models.dart';
@@ -315,7 +317,7 @@ class SettingsScreen extends StatelessWidget {
           _buildMenuItem(context, Icons.person_outline, "계정 관리", () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountManagementScreen()))),
           _buildMenuItem(context, Icons.visibility_outlined, "공개 범위", () {}),
           _buildMenuItem(context, Icons.lock_open_outlined, "권한 관리", () {}),
-          _buildMenuItem(context, Icons.block_flipped, "차단된 계정", () {}),
+          _buildMenuItem(context, Icons.block_flipped, "차단된 계정", () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BlockedAccountsScreen()))),
           const Spacer(),
           Padding(
             padding: const EdgeInsets.only(bottom: 100),
@@ -692,6 +694,72 @@ class _PasswordChangeStep2ScreenState extends State<PasswordChangeStep2Screen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 9. 차단된 사용자 정보 조회
+// -----------------------------------------------------------------------------
+class BlockedAccountsScreen extends StatefulWidget {
+  const BlockedAccountsScreen({super.key});
+
+  @override
+  State<BlockedAccountsScreen> createState() => _BlockedAccountsScreenState();
+}
+
+class _BlockedAccountsScreenState extends State<BlockedAccountsScreen> {
+  List<UserModel> _blockedUsers = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBlockedUsers();
+  }
+
+  void _loadBlockedUsers() async {
+    final myUid = FirebaseAuth.instance.currentUser?.uid;
+    if (myUid == null) return;
+    final users = await SocialRepository().getBlockedUsers(myUid);
+    setState(() {
+      _blockedUsers = users;
+      _isLoading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("차단된 계정", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF4CAF50),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _blockedUsers.isEmpty
+          ? const Center(child: Text("차단된 계정이 없습니다."))
+          : ListView.builder(
+        itemCount: _blockedUsers.length,
+        itemBuilder: (context, index) {
+          final user = _blockedUsers[index];
+          return ListTile(
+            leading: CircleAvatar(
+              backgroundImage: user.profileImageUrl != null ? NetworkImage(user.profileImageUrl!) : null,
+              child: user.profileImageUrl == null ? const Icon(Icons.person) : null,
+            ),
+            title: Text(user.nickname),
+            trailing: OutlinedButton(
+              onPressed: () async {
+                await context.read<SocialViewModel>().toggleBlock(user.uid);
+                _loadBlockedUsers();
+              },
+              child: const Text("차단 해제"),
+            ),
+          );
+        },
+      ),
     );
   }
 }
