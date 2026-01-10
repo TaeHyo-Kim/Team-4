@@ -16,6 +16,9 @@ import 'features/profile/viewmodels.dart';
 import 'features/profile/views.dart';
 import 'core/notification_service.dart';
 
+// 전역 NotificationService 인스턴스
+final notificationService = NotificationService();
+
 // 백그라운드 메시지 핸들러 (최상위 레벨 함수)
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -30,7 +33,6 @@ void main() async {
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   
   // 알림 서비스 초기화
-  final notificationService = NotificationService();
   await notificationService.initialize();
   
   runApp(const MyApp());
@@ -96,9 +98,8 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   int _selectedIndex = 0;
-  final NotificationService _notificationService = NotificationService();
 
   // ProfileScreen(옛날버전) 대신 ProfileView(수정된 버전)를 사용
   final List<Widget> _screens = [
@@ -112,20 +113,31 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // 사용자가 로그인되어 있을 때 알림 리스너 설정
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        _notificationService.getFCMToken(); // FCM 토큰 갱신
-        _notificationService.setupNotificationListener(); // 알림 리스너 설정
-      }
+      _setupNotificationListener();
     });
   }
 
   @override
   void dispose() {
-    _notificationService.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 앱이 포그라운드로 돌아와도 리스너는 재설정하지 않음
+    // NotificationService 내부에서 이미 중복 방지 로직이 있음
+  }
+
+  void _setupNotificationListener() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      notificationService.getFCMToken(); // FCM 토큰 갱신
+      notificationService.setupNotificationListener(); // 알림 리스너 설정
+    }
   }
 
   @override

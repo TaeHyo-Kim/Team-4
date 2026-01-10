@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart' as ph;
 import '../auth/viewmodels.dart';
 import '../auth/views.dart'; 
 import '../pet/views.dart'; 
+import '../pet/viewmodels.dart';
 import '../social/views.dart';
 import '../social/viewmodels.dart';
 import 'viewmodels.dart';
@@ -94,15 +95,12 @@ class ProfileView extends StatelessWidget {
           ),
           const Divider(thickness: 1, color: Colors.black12, height: 1),
 
-          // 2. [스크롤] 반려동물 목록 및 피드
+          // 2. [스크롤] 피드
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
+              shrinkWrap: true,
               children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 10),
-                  child: PetScreen(),
-                ),
                 const SizedBox(height: 80),
                 const Center(
                   child: Text(

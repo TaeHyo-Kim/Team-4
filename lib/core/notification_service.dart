@@ -44,6 +44,10 @@ class NotificationService {
   }
 
   StreamSubscription<QuerySnapshot>? _notificationSubscription;
+  String? _lastNotificationId;
+  final Set<String> _processedNotificationIds = <String>{};
+  DateTime? _listenerSetupTime; // 리스너 설정 시간
+  String? _currentUserId; // 현재 리스너가 설정된 사용자 ID
 
   /// 초기화 및 알림 핸들러 설정
   Future<void> initialize() async {
@@ -64,6 +68,8 @@ class NotificationService {
       setupNotificationListener();
     } else {
       debugPrint('사용자가 알림 권한을 거부했습니다.');
+      // 권한이 없어도 Firestore 리스너는 설정 (로컬 알림은 안되지만 데이터는 받을 수 있음)
+      setupNotificationListener();
     }
 
     // 포그라운드 알림 핸들러
@@ -95,12 +101,14 @@ class NotificationService {
       iOS: iosSettings,
     );
 
-    await _localNotifications.initialize(
+    final initialized = await _localNotifications.initialize(
       initSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
         debugPrint('알림 클릭: ${response.payload}');
       },
     );
+
+    debugPrint('로컬 알림 초기화 결과: $initialized');
 
     // Android 알림 채널 생성 (Android 8.0 이상)
     const androidChannel = AndroidNotificationChannel(
@@ -112,72 +120,150 @@ class NotificationService {
     await _localNotifications
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(androidChannel);
+    
+    // Android에서 알림 권한 요청
+    final androidImplementation = _localNotifications
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    if (androidImplementation != null) {
+      final granted = await androidImplementation.requestNotificationsPermission();
+      debugPrint('Android 알림 권한 요청 결과: $granted');
+    }
   }
 
   /// 로컬 알림 표시
   Future<void> _showLocalNotification(String title, String body) async {
-    const androidDetails = AndroidNotificationDetails(
-      'default_channel',
-      '알림',
-      channelDescription: '앱 알림 채널',
-      importance: Importance.high,
-      priority: Priority.high,
-      showWhen: true,
-    );
-    const iosDetails = DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-    );
-    const details = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
+    try {
+      debugPrint('로컬 알림 표시 시도: $title - $body');
+      
+      // Android에서 알림 권한 확인
+      final androidImplementation = _localNotifications
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      
+      if (androidImplementation != null) {
+        final granted = await androidImplementation.requestNotificationsPermission();
+        debugPrint('로컬 알림 권한 상태: $granted');
+        if (granted == false) {
+          debugPrint('로컬 알림 권한이 거부되어 알림을 표시할 수 없습니다.');
+          return;
+        }
+      }
 
-    await _localNotifications.show(
-      _notificationId++,
-      title,
-      body,
-      details,
-    );
+      const androidDetails = AndroidNotificationDetails(
+        'default_channel',
+        '알림',
+        channelDescription: '앱 알림 채널',
+        importance: Importance.high,
+        priority: Priority.high,
+        showWhen: true,
+        enableVibration: true,
+        playSound: true,
+      );
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      );
+      const details = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+
+      final notificationId = _notificationId++;
+      await _localNotifications.show(
+        notificationId,
+        title,
+        body,
+        details,
+      );
+      
+      debugPrint('로컬 알림 표시 완료: ID=$notificationId, Title=$title');
+    } catch (e, stackTrace) {
+      debugPrint('로컬 알림 표시 실패: $e');
+      debugPrint('스택 트레이스: $stackTrace');
+    }
   }
 
   /// Firestore 알림 리스너 설정
   void setupNotificationListener() {
     final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      debugPrint('사용자가 로그인되어 있지 않아 알림 리스너를 설정할 수 없습니다.');
+      return;
+    }
+
+    // 같은 사용자이고 리스너가 이미 설정되어 있으면 재설정하지 않음
+    if (_currentUserId == uid && _notificationSubscription != null) {
+      debugPrint('알림 리스너가 이미 설정되어 있습니다: $uid');
+      return;
+    }
+
+    // 사용자가 바뀌었거나 리스너가 없으면 재설정
+    if (_currentUserId != uid) {
+      _processedNotificationIds.clear();
+      _currentUserId = uid;
+    }
 
     // 기존 리스너가 있으면 취소
     _notificationSubscription?.cancel();
-
-    // 실시간으로 알림 감지
-    String? lastNotificationId;
     
+    // 리스너 설정 시간 기록 (이 시간 이후에 생성된 알림만 처리)
+    _listenerSetupTime = DateTime.now();
+
+    debugPrint('알림 리스너 설정 시작: $uid (설정 시간: $_listenerSetupTime)');
+    
+    // 실시간으로 알림 감지 - 변경사항만 감지하도록 수정
+    // 인덱스 오류 방지를 위해 orderBy 없이 먼저 시도
     _notificationSubscription = _db
         .collection('notifications')
         .where('userId', isEqualTo: uid)
         .where('read', isEqualTo: false)
-        .orderBy('createdAt', descending: true)
-        .limit(1)
         .snapshots()
         .listen((snapshot) {
-      if (snapshot.docs.isNotEmpty) {
-        final doc = snapshot.docs.first;
-        final notificationId = doc.id;
-        
-        // 중복 알림 방지
-        if (lastNotificationId == notificationId) return;
-        lastNotificationId = notificationId;
-        
-        final notification = doc.data();
-        final title = notification['title'] as String? ?? '알림';
-        final body = notification['body'] as String? ?? '';
-        
-        debugPrint('새 알림 수신: $title - $body');
-        
-        // 실제 로컬 알림 표시
-        _showLocalNotification(title, body);
+      debugPrint('알림 스냅샷 수신: ${snapshot.docs.length}개, 변경사항: ${snapshot.docChanges.length}개');
+      
+      // 새로 추가된 알림만 처리
+      for (var docChange in snapshot.docChanges) {
+        if (docChange.type == DocumentChangeType.added) {
+          final notificationId = docChange.doc.id;
+          
+          // 이미 처리한 알림인지 확인
+          if (_processedNotificationIds.contains(notificationId)) {
+            debugPrint('이미 처리한 알림 스킵: $notificationId');
+            continue;
+          }
+          
+          final notification = docChange.doc.data();
+          if (notification == null) {
+            debugPrint('알림 데이터가 null입니다: $notificationId');
+            continue;
+          }
+          
+          // 리스너 설정 이후에 생성된 알림만 처리 (초기 로드 시 기존 알림 무시)
+          final createdAt = notification['createdAt'] as Timestamp?;
+          if (createdAt != null && _listenerSetupTime != null) {
+            final createdTime = createdAt.toDate();
+            // 리스너 설정 시간보다 5초 이전에 생성된 알림은 무시 (초기 로드 방지)
+            if (createdTime.isBefore(_listenerSetupTime!.subtract(const Duration(seconds: 5)))) {
+              debugPrint('기존 알림 무시 (리스너 설정 이전): $notificationId, 생성시간: $createdTime');
+              _processedNotificationIds.add(notificationId); // 처리 목록에 추가하여 다시 처리하지 않음
+              continue;
+            }
+          }
+          
+          _processedNotificationIds.add(notificationId);
+          
+          final title = notification['title'] as String? ?? '알림';
+          final body = notification['body'] as String? ?? '';
+          
+          debugPrint('새 알림 감지 및 표시: ID=$notificationId, Title=$title, Body=$body');
+          
+          // 실제 로컬 알림 표시
+          _showLocalNotification(title, body);
+        }
       }
+    }, onError: (error) {
+      debugPrint('알림 리스너 오류: $error');
+      // 에러가 발생해도 리스너는 유지 (일시적인 네트워크 오류일 수 있음)
     });
   }
 
@@ -193,15 +279,19 @@ class NotificationService {
     required String followerNickname,
   }) async {
     try {
-      // 팔로우받은 사용자의 FCM 토큰 가져오기
+      debugPrint('팔로우 알림 전송 시작: follower=$followerId, followed=$followedUserId, nickname=$followerNickname');
+      
+      // 팔로우받은 사용자 확인
       final followedUserDoc = await _db.collection('users').doc(followedUserId).get();
-      if (!followedUserDoc.exists) return;
+      if (!followedUserDoc.exists) {
+        debugPrint('팔로우받은 사용자를 찾을 수 없습니다: $followedUserId');
+        return;
+      }
 
-      final fcmToken = followedUserDoc.data()?['fcmToken'] as String?;
-      if (fcmToken == null) return;
+      debugPrint('팔로우받은 사용자 확인 완료, 알림 저장 시작');
 
-      // 알림 데이터 저장 (Firebase Functions에서 처리하거나 직접 전송)
-      await _db.collection('notifications').add({
+      // 알림 데이터 저장 (FCM 토큰과 관계없이 항상 저장)
+      final notificationData = {
         'userId': followedUserId,
         'type': 'follow',
         'fromUserId': followerId,
@@ -210,12 +300,19 @@ class NotificationService {
         'body': '새로운 팔로워가 생겼습니다',
         'read': false,
         'createdAt': FieldValue.serverTimestamp(),
-      });
+      };
+      
+      debugPrint('알림 데이터: $notificationData');
+      
+      final docRef = await _db.collection('notifications').add(notificationData);
+      
+      debugPrint('팔로우 알림 저장 완료: notificationId=${docRef.id}, userId=$followedUserId');
 
       // 실제 푸시 알림은 Firebase Functions에서 처리하거나
       // 여기서 직접 전송할 수 있습니다 (서버 키 필요)
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint("팔로우 알림 전송 실패: $e");
+      debugPrint("스택 트레이스: $stackTrace");
     }
   }
 
