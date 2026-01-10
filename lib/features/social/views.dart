@@ -38,6 +38,7 @@ class _SocialScreenState extends State<SocialScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
+        key: const ValueKey('social_appbar'),
         backgroundColor: const Color(0xFF4CAF50),
         title: const Text(
           "검색",
@@ -188,6 +189,7 @@ class OtherUserProfileView extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
+        key: ValueKey('other_user_profile_appbar_${user.uid}'),
         title: Text("${user.nickname}님의 프로필",
             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF4CAF50),

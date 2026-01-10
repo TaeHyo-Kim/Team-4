@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../core/notification_service.dart';
 
 // 각 기능별 모델들을 import 합니다.
 import '../features/auth/models.dart';
@@ -112,6 +113,7 @@ class PetRepository {
 // -----------------------------------------------------------------------------
 class SocialRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final NotificationService _notificationService = NotificationService();
 
   // 전체 유저 목록 조회 (나 자신 제외)
   Future<List<UserModel>> getAllUsers(String myUid) async {
@@ -189,6 +191,8 @@ class SocialRepository {
     final followerRef = targetRef.collection('followers').doc(myUid);
 
     try {
+      String? myNickname;
+      
       await _db.runTransaction((transaction) async {
         // 읽기는 항상 쓰기보다 먼저!
         final myDoc = await transaction.get(myRef);
@@ -197,6 +201,10 @@ class SocialRepository {
 
         if (followDoc.exists) return; // 이미 팔로우 중이면 무시
         if (!myDoc.exists || !targetDoc.exists) return;
+
+        // 내 닉네임 저장 (알림 전송용)
+        final myData = myDoc.data() as Map<String, dynamic>?;
+        myNickname = myData?['nickname'] as String?;
 
         // 쓰기 작업
         transaction.set(followRef, {'createdAt': FieldValue.serverTimestamp()});
@@ -208,6 +216,20 @@ class SocialRepository {
         // 상대방 정보 업데이트 (followerCount +1)
         transaction.update(targetRef, {'stats.followerCount': FieldValue.increment(1)});
       });
+
+      // 팔로우 알림 전송 (비동기로 처리, 실패해도 팔로우는 유지)
+      if (myNickname != null) {
+        try {
+          await _notificationService.sendFollowNotification(
+            followerId: myUid,
+            followedUserId: targetUid,
+            followerNickname: myNickname!,
+          );
+        } catch (e) {
+          print("팔로우 알림 전송 실패: $e");
+          // 알림 전송 실패해도 팔로우는 성공으로 처리
+        }
+      }
     } catch (e) {
       print("Follow Transaction Error: $e");
       rethrow; // ViewModel에서 에러를 잡아 스낵바를 띄우게 함
@@ -246,6 +268,7 @@ class SocialRepository {
 // -----------------------------------------------------------------------------
 class WalkRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final NotificationService _notificationService = NotificationService();
 
   // 산책 기록 저장
   Future<void> saveWalk(WalkRecordModel walk) async {
@@ -254,6 +277,28 @@ class WalkRepository {
         : _db.collection('walks').doc(walk.id);
 
     await docRef.set(walk.toMap());
+
+    // 공개 게시물인 경우에만 팔로워에게 알림 전송
+    if (walk.visibility == 'public') {
+      try {
+        // 사용자 정보 가져오기
+        final userDoc = await _db.collection('users').doc(walk.userId).get();
+        if (userDoc.exists) {
+          final userData = userDoc.data() as Map<String, dynamic>?;
+          final userNickname = userData?['nickname'] as String? ?? '사용자';
+          
+          // 팔로워에게 피드 알림 전송
+          await _notificationService.sendFeedNotification(
+            userId: walk.userId,
+            userNickname: userNickname,
+            postId: docRef.id,
+          );
+        }
+      } catch (e) {
+        print("피드 알림 전송 실패: $e");
+        // 알림 전송 실패해도 산책 기록 저장은 성공으로 처리
+      }
+    }
   }
 
   // 내 산책 기록 불러오기 (최신순 정렬)

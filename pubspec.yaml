@@ -39,6 +39,9 @@ dependencies:
   image_picker: ^1.1.2
   intl: ^0.20.2
   uuid: ^4.4.0
+  permission_handler: ^11.3.1  # 권한 관리
+  firebase_messaging: ^14.9.4  # 푸시 알림 (Firebase 2.x/4.x 호환 버전)
+  flutter_local_notifications: ^17.2.2  # 로컬 알림 표시
 
   # ------------------------------------------------
   # 4. UI 리소스
