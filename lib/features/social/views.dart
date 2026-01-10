@@ -14,11 +14,9 @@ class SocialScreen extends StatefulWidget {
 class _SocialScreenState extends State<SocialScreen> {
   final _searchCtrl = TextEditingController();
 
-  // 화면이 처음 뜰 때 데이터 불러오기 (혹은 생성자에서 호출했으면 생략 가능)
   @override
   void initState() {
     super.initState();
-    // 화면 진입 시 최신 데이터 로드
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<SocialViewModel>().fetchUsers();
     });
@@ -32,7 +30,6 @@ class _SocialScreenState extends State<SocialScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ViewModel 상태 감지
     final socialVM = context.watch<SocialViewModel>();
 
     return Scaffold(
@@ -48,7 +45,6 @@ class _SocialScreenState extends State<SocialScreen> {
       ),
       body: Column(
         children: [
-          // [1] 검색바 영역
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: TextField(
@@ -69,20 +65,17 @@ class _SocialScreenState extends State<SocialScreen> {
                   onPressed: () {
                     _searchCtrl.clear();
                     context.read<SocialViewModel>().searchUsers('');
-                    FocusScope.of(context).unfocus(); // 키보드 내리기
+                    FocusScope.of(context).unfocus();
                   },
                 )
                     : null,
               ),
               onChanged: (val) {
-                // 입력할 때마다 검색 실행
                 context.read<SocialViewModel>().searchUsers(val);
-                setState(() {}); // X버튼 표시 갱신용
+                setState(() {});
               },
             ),
           ),
-
-          // [2] 유저 리스트 영역
           Expanded(
             child: socialVM.isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -110,7 +103,6 @@ class _SocialScreenState extends State<SocialScreen> {
     );
   }
 
-  // 리스트 아이템 (유저 한 명)
   Widget _buildUserTile(BuildContext context, UserModel user, SocialViewModel vm) {
     final isFollowing = vm.isFollowing(user.uid);
 
@@ -130,7 +122,6 @@ class _SocialScreenState extends State<SocialScreen> {
         user.nickname,
         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
       ),
-      // 이메일이나 상태 메시지 등 보조 정보
       subtitle: Text(
         user.email,
         maxLines: 1,
@@ -149,7 +140,6 @@ class _SocialScreenState extends State<SocialScreen> {
           }
         },
         style: ElevatedButton.styleFrom(
-          // 팔로우 중이면 회색, 아니면 노란색(테마색)
           backgroundColor: isFollowing ? Colors.grey[200] : Colors.amber,
           foregroundColor: isFollowing ? Colors.black87 : Colors.white,
           elevation: 0,
@@ -162,7 +152,6 @@ class _SocialScreenState extends State<SocialScreen> {
         ),
       ),
       onTap: () {
-        // [추가] 유저 클릭 시 상세 프로필로 이동
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -181,7 +170,6 @@ class OtherUserProfileView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // SocialViewModel을 통해 팔로우 상태 감지 및 동작 수행
     final socialVM = context.watch<SocialViewModel>();
     final isFollowing = socialVM.isFollowing(user.uid);
 
@@ -193,10 +181,16 @@ class OtherUserProfileView extends StatelessWidget {
         backgroundColor: const Color(0xFF4CAF50),
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.block),
+            onPressed: () => _showBlockDialog(context, socialVM),
+            tooltip: "차단하기",
+          ),
+        ],
       ),
       body: Column(
         children: [
-          // 1. 유저 정보 상단 (이미지, 이름, 팔로우 버튼)
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 35, 15, 25),
             child: Row(
@@ -222,7 +216,6 @@ class OtherUserProfileView extends StatelessWidget {
                       Text(user.bio ?? "안녕하세요!",
                           style: const TextStyle(color: Colors.grey, fontSize: 13)),
                       const SizedBox(height: 8),
-                      // 통계 정보 (공통 컴포넌트 사용)
                       UserStatsRow(
                         userId: user.uid,
                         postCount: user.stats.postCount,
@@ -232,7 +225,6 @@ class OtherUserProfileView extends StatelessWidget {
                     ],
                   ),
                 ),
-                // [변경] 프로필 편집 버튼 대신 팔로우/언팔로우 버튼
                 ElevatedButton(
                   onPressed: () => socialVM.toggleFollow(user.uid),
                   style: ElevatedButton.styleFrom(
@@ -247,8 +239,6 @@ class OtherUserProfileView extends StatelessWidget {
             ),
           ),
           const Divider(),
-
-          // 2. 해당 유저의 산책 기록 리스트 (필요 시 추가 구현)
           const Expanded(
             child: Center(
               child: Text("기능 준비 중입니다.", style: TextStyle(color: Colors.grey)),
@@ -256,6 +246,89 @@ class OtherUserProfileView extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  void _showBlockDialog(BuildContext context, SocialViewModel vm) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("사용자 차단"),
+        content: Text("${user.nickname}님을 차단하시겠습니까?\n차단하면 검색 결과에 나타나지 않으며 팔로우가 해제됩니다."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("취소")),
+          TextButton(
+            onPressed: () async {
+              await vm.toggleBlock(user.uid);
+              if (context.mounted) {
+                Navigator.pop(ctx);
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("차단되었습니다.")),
+                );
+              }
+            },
+            child: const Text("차단", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class BlockedUsersScreen extends StatefulWidget {
+  const BlockedUsersScreen({super.key});
+
+  @override
+  State<BlockedUsersScreen> createState() => _BlockedUsersScreenState();
+}
+
+class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<SocialViewModel>().fetchBlockedUsers();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final socialVM = context.watch<SocialViewModel>();
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text("차단된 계정", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF4CAF50),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: socialVM.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : socialVM.blockedUserList.isEmpty
+              ? const Center(child: Text("차단된 계정이 없습니다.", style: TextStyle(color: Colors.grey)))
+              : ListView.builder(
+                  itemCount: socialVM.blockedUserList.length,
+                  itemBuilder: (context, index) {
+                    final user = socialVM.blockedUserList[index];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundImage: (user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty)
+                            ? NetworkImage(user.profileImageUrl!)
+                            : null,
+                        child: (user.profileImageUrl == null || user.profileImageUrl!.isEmpty)
+                            ? const Icon(Icons.person)
+                            : null,
+                      ),
+                      title: Text(user.nickname, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      trailing: OutlinedButton(
+                        onPressed: () => socialVM.unblockUser(user.uid),
+                        style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                        child: const Text("차단 해제"),
+                      ),
+                    );
+                  },
+                ),
     );
   }
 }
