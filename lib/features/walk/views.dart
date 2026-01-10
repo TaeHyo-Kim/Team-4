@@ -30,6 +30,7 @@ class _WalkScreenState extends State<WalkScreen> {
     final vm = context.watch<WalkViewModel>();
     return Scaffold(
       appBar: AppBar(
+          key: const ValueKey('walk_appbar'),
           title: const Text("산책"), backgroundColor: const Color(0xFF4CAF50)),
       body: Listener(
         onPointerDown: (_) => vm.onUserInteractionStarted(),

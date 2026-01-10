@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'features/auth/viewmodels.dart';
 import 'features/auth/views.dart';
@@ -13,10 +14,25 @@ import 'features/walk/viewmodels.dart';
 import 'features/walk/views.dart';
 import 'features/profile/viewmodels.dart';
 import 'features/profile/views.dart';
+import 'core/notification_service.dart';
+
+// 백그라운드 메시지 핸들러 (최상위 레벨 함수)
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  debugPrint('백그라운드 알림 처리: ${message.notification?.title}');
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+  
+  // Firebase Messaging 백그라운드 핸들러 등록
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  
+  // 알림 서비스 초기화
+  final notificationService = NotificationService();
+  await notificationService.initialize();
+  
   runApp(const MyApp());
 }
 
@@ -44,6 +60,7 @@ class MyApp extends StatelessWidget {
             backgroundColor: Colors.white,
             foregroundColor: Colors.black,
             elevation: 0,
+            centerTitle: false,
           ),
         ),
         home: const AuthGate(),
@@ -81,6 +98,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
+  final NotificationService _notificationService = NotificationService();
 
   // ProfileScreen(옛날버전) 대신 ProfileView(수정된 버전)를 사용
   final List<Widget> _screens = [
@@ -90,6 +108,25 @@ class _MainScreenState extends State<MainScreen> {
     const SocialScreen(),
     const ProfileView(), // ProfileView로 교체
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // 사용자가 로그인되어 있을 때 알림 리스너 설정
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        _notificationService.getFCMToken(); // FCM 토큰 갱신
+        _notificationService.setupNotificationListener(); // 알림 리스너 설정
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _notificationService.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -139,6 +176,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
+        key: const ValueKey('statistics_appbar'),
         backgroundColor: const Color(0xFF2ECC71),
         title: const Text("통계", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         elevation: 0,
