@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../auth/viewmodels.dart';
-import '../auth/views.dart'; // SettingsScreen이 있는 auth/views.dart import
+import '../auth/views.dart'; 
 import '../pet/views.dart'; 
 import 'viewmodels.dart';
 
@@ -20,12 +20,11 @@ class ProfileView extends StatelessWidget {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text("프로필", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF2ECC71), // 예전 녹색 헤더
+        backgroundColor: const Color(0xFF4CAF50),
         elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white),
-            // [수정] 바텀 시트 대신 설정 화면(SettingsScreen)으로 이동
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
           )
         ],
@@ -34,46 +33,44 @@ class ProfileView extends StatelessWidget {
         children: [
           // 1. [고정] 프로필 상단 정보 (이미지, 이름, 소개, 팔로워/팔로잉 + 우측 편집 버튼)
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 35, 15, 25), // 위아래 간격을 충분히 확보
+            padding: const EdgeInsets.fromLTRB(15, 30, 10, 20), // 오버플로우 방지를 위한 여백 최적화
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // 프로필 이미지
                 CircleAvatar(
-                  radius: 45,
+                  radius: 42, 
                   backgroundColor: Colors.grey[200],
                   backgroundImage: (user?.profileImageUrl != null && user!.profileImageUrl!.isNotEmpty)
                       ? NetworkImage(user.profileImageUrl!)
                       : null,
                   child: (user?.profileImageUrl == null || user!.profileImageUrl!.isEmpty)
-                      ? const Icon(Icons.person, size: 45, color: Colors.white)
+                      ? const Icon(Icons.person, size: 42, color: Colors.white)
                       : null,
                 ),
-                const SizedBox(width: 15),
-                // 텍스트 정보 영역 (남은 공간 차지)
+                const SizedBox(width: 12), 
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(user?.nickname ?? "익명 유저", 
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
                         maxLines: 1, overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 4),
                       Text(user?.bio ?? "좋은 하루 되세요", 
                         style: const TextStyle(color: Colors.grey, fontSize: 13),
                         maxLines: 1, overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 8),
-                      // 게시물 / 팔로우 / 팔로잉 (너비에 맞춰 자동 크기 조절)
+                      // FittedBox로 너비 자동 조절
                       FittedBox(
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerLeft,
                         child: Row(
                           children: [
                             Text("게시물 ${user?.stats.postCount ?? 0}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                            const SizedBox(width: 10),
+                            const SizedBox(width: 8),
                             Text("팔로우 ${user?.stats.followingCount ?? 0}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                            const SizedBox(width: 10),
+                            const SizedBox(width: 8),
                             Text("팔로워 ${user?.stats.followerCount ?? 0}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
                           ],
                         ),
@@ -81,18 +78,17 @@ class ProfileView extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                // 프로필 편집 버튼 (우측 배치)
+                const SizedBox(width: 5), 
                 ElevatedButton(
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileEditView())),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2196F3), // 이미지와 같은 파란색
+                    backgroundColor: const Color(0xFF2196F3),
                     foregroundColor: Colors.white,
                     elevation: 1,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                  child: const Text("프로필 편집", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                  child: const Text("프로필 편집", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -104,15 +100,11 @@ class ProfileView extends StatelessWidget {
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
-                // 반려동물 목록
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 10),
                   child: PetScreen(),
                 ),
-
-                const SizedBox(height: 80), // 중앙 배치를 위한 여백 조정
-
-                // 산책 기록 없음 안내
+                const SizedBox(height: 80),
                 const Center(
                   child: Text(
                     "아직 산책 기록이 없습니다.",
@@ -123,7 +115,6 @@ class ProfileView extends StatelessWidget {
                     ),
                   ),
                 ),
-                
                 const SizedBox(height: 40),
               ],
             ),
@@ -167,7 +158,11 @@ class _ProfileEditViewState extends State<ProfileEditView> {
     final user = context.watch<AuthViewModel>().userModel;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("프로필 수정"), backgroundColor: const Color(0xFF2ECC71)),
+      appBar: AppBar(
+        title: const Text("프로필 수정", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF4CAF50),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(30),
         child: Column(
@@ -191,9 +186,9 @@ class _ProfileEditViewState extends State<ProfileEditView> {
                   Positioned(
                     right: 0, bottom: 0,
                     child: Container(
-                      padding: const EdgeInsets.all(6), // 패딩 축소 (8 -> 6)
+                      padding: const EdgeInsets.all(6), 
                       decoration: const BoxDecoration(color: Color(0xFF3498DB), shape: BoxShape.circle),
-                      child: const Icon(Icons.camera_alt, size: 22, color: Colors.white), // 사이즈 축소 (28 -> 22)
+                      child: const Icon(Icons.camera_alt, size: 22, color: Colors.white),
                     ),
                   ),
                 ],

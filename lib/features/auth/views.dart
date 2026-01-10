@@ -75,6 +75,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   width: double.infinity, height: 50,
                   child: ElevatedButton(
                     onPressed: isLoading ? null : _handleLogin,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.amber,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
                     child: isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("로그인"),
                   ),
                 ),
@@ -133,7 +138,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("비밀번호 찾기"), elevation: 0, backgroundColor: Colors.transparent, foregroundColor: Colors.black),
+      appBar: AppBar(
+        title: const Text("비밀번호 찾기", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        elevation: 0,
+        backgroundColor: const Color(0xFF4CAF50),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -154,7 +164,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity, height: 50,
-                  child: ElevatedButton(onPressed: _handleReset, child: const Text("비밀번호 재설정 메일 발송")),
+                  child: ElevatedButton(
+                    onPressed: _handleReset,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.amber,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: const Text("비밀번호 재설정 메일 발송"),
+                  ),
                 ),
               ] else ...[
                 const Icon(Icons.check_circle, size: 80, color: Colors.green),
@@ -165,7 +183,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 const SizedBox(height: 32),
                 SizedBox(
                   width: double.infinity, height: 50,
-                  child: ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text("로그인으로 돌아가기")),
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.amber,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: const Text("로그인으로 돌아가기"),
+                  ),
                 ),
               ],
               const SizedBox(height: 80),
@@ -214,7 +240,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Widget build(BuildContext context) {
     final isLoading = context.watch<AuthViewModel>().isLoading;
     return Scaffold(
-      appBar: AppBar(title: const Text("회원가입")),
+      appBar: AppBar(
+        title: const Text("회원가입", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF4CAF50),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Form(
@@ -240,7 +270,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 activeColor: Colors.amber, controlAffinity: ListTileControlAffinity.leading, contentPadding: EdgeInsets.zero,
               ),
               const SizedBox(height: 30),
-              SizedBox(width: double.infinity, height: 50, child: ElevatedButton(onPressed: isLoading ? null : _handleSignUp, child: isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("가입하기"))),
+              SizedBox(
+                width: double.infinity, height: 50,
+                child: ElevatedButton(
+                  onPressed: isLoading ? null : _handleSignUp,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.amber,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("가입하기"),
+                ),
+              ),
             ],
           ),
         ),
@@ -296,7 +337,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF2ECC71),
+        backgroundColor: const Color(0xFF4CAF50),
         title: const Text("프로필", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         elevation: 0,
         actions: [
@@ -330,14 +371,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         const SizedBox(height: 4),
                         Text(user?.bio ?? "좋은하루 되세요", style: TextStyle(color: Colors.grey[600], fontSize: 14)),
                         const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Text("게시물 ${_walkRecords.length}", style: TextStyle(color: Colors.grey[700], fontSize: 13)),
-                            const SizedBox(width: 12),
-                            Text("팔로우 ${user?.stats.followingCount ?? 0}", style: TextStyle(color: Colors.grey[700], fontSize: 13)),
-                            const SizedBox(width: 12),
-                            Text("팔로워 ${user?.stats.followerCount ?? 0}", style: TextStyle(color: Colors.grey[700], fontSize: 13)),
-                          ],
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            children: [
+                              Text("게시물 ${_walkRecords.length}", style: TextStyle(color: Colors.grey[700], fontSize: 13)),
+                              const SizedBox(width: 12),
+                              Text("팔로우 ${user?.stats.followingCount ?? 0}", style: TextStyle(color: Colors.grey[700], fontSize: 13)),
+                              const SizedBox(width: 12),
+                              Text("팔로워 ${user?.stats.followerCount ?? 0}", style: TextStyle(color: Colors.grey[700], fontSize: 13)),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -452,7 +496,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 }
 
 // -----------------------------------------------------------------------------
-// 5. 설정 화면 (SettingsScreen) - 이미지1
+// 5. 설정 화면 (SettingsScreen)
 // -----------------------------------------------------------------------------
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -461,39 +505,38 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final authVM = context.read<AuthViewModel>();
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF2ECC71),
+        backgroundColor: const Color(0xFF4CAF50),
         title: const Text("설정", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         elevation: 0,
-        actions: [IconButton(icon: const Icon(Icons.menu), onPressed: () {})],
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Column(
         children: [
-          const SizedBox(height: 10),
-          _buildMenuItem(context, "계정 관리", () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountManagementScreen()))),
-          _buildMenuItem(context, "공개 범위", () {}),
-          _buildMenuItem(context, "권한 관리", () {}),
-          _buildMenuItem(context, "차단된 계정", () {}),
+          const SizedBox(height: 20),
+          _buildMenuItem(context, Icons.person_outline, "계정 관리", () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountManagementScreen()))),
+          _buildMenuItem(context, Icons.visibility_outlined, "공개 범위", () {}),
+          _buildMenuItem(context, Icons.lock_open_outlined, "권한 관리", () {}),
+          _buildMenuItem(context, Icons.block_flipped, "차단된 계정", () {}),
           const Spacer(),
           Padding(
-            padding: const EdgeInsets.only(bottom: 40),
-            child: OutlinedButton(
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text("로그아웃"),
-                    content: const Text("정말 로그아웃 하시겠습니까?"),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("취소")),
-                      TextButton(onPressed: () { Navigator.pop(ctx); authVM.logout(); Navigator.pop(context); }, child: const Text("로그아웃", style: TextStyle(color: Colors.red))),
-                    ],
-                  ),
-                );
-              },
-              style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.black), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-              child: const Text("로그아웃", style: TextStyle(color: Colors.black)),
+            padding: const EdgeInsets.only(bottom: 100),
+            child: SizedBox(
+              width: 200,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: () {
+                  _showLogoutDialog(context, authVM);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.amber,
+                  foregroundColor: Colors.white,
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                ),
+                child: const Text("로그아웃", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
             ),
           ),
         ],
@@ -501,25 +544,43 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMenuItem(BuildContext context, String title, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFDF5E6),
-          border: Border.all(color: Colors.black),
-        ),
-        child: Center(child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+  Widget _buildMenuItem(BuildContext context, IconData icon, String title, VoidCallback onTap) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: ListTile(
+        leading: Icon(icon, color: const Color(0xFF4CAF50)),
+        title: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+        onTap: onTap,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  void _showLogoutDialog(BuildContext context, AuthViewModel authVM) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("로그아웃"),
+        content: const Text("정말 로그아웃 하시겠습니까?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("취소")),
+          TextButton(onPressed: () { Navigator.pop(ctx); authVM.logout(); Navigator.pop(context); }, child: const Text("로그아웃", style: TextStyle(color: Colors.red))),
+        ],
       ),
     );
   }
 }
 
 // -----------------------------------------------------------------------------
-// 6. 계정 관리 화면 (AccountManagementScreen) - 이미지2 좌측
+// 6. 계정 관리 화면 (AccountManagementScreen)
 // -----------------------------------------------------------------------------
 class AccountManagementScreen extends StatelessWidget {
   const AccountManagementScreen({super.key});
@@ -530,88 +591,115 @@ class AccountManagementScreen extends StatelessWidget {
     final user = authVM.userModel;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF2ECC71),
+        backgroundColor: const Color(0xFF4CAF50),
         title: const Text("계정 관리", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         elevation: 0,
-        actions: [IconButton(icon: const Icon(Icons.menu), onPressed: () {})],
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("계정 정보", style: TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text("이메일", style: TextStyle(fontSize: 18)),
-                Text(user?.email ?? "", style: const TextStyle(fontSize: 18)),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text("닉네임", style: TextStyle(fontSize: 18)),
-                Text(user?.nickname ?? "", style: const TextStyle(fontSize: 18, color: Colors.black)),
-              ],
-            ),
-            const SizedBox(height: 40),
-            const Text("계정 보안", style: TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
-            _buildActionItem("비밀번호 변경", () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PasswordChangeStep1Screen()))),
-            const Spacer(),
-            Center(
-              child: OutlinedButton(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text("회원 탈퇴"),
-                      content: const Text("정말 탈퇴하시겠습니까? 모든 데이터가 삭제됩니다."),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("취소")),
-                        TextButton(onPressed: () async {
-                          await authVM.deleteAccount();
-                          if (ctx.mounted) {
-                            Navigator.pop(ctx);
-                            Navigator.pop(context);
-                            Navigator.pop(context);
-                          }
-                        }, child: const Text("회원탈퇴", style: TextStyle(color: Colors.red))),
-                      ],
-                    ),
-                  );
-                },
-                style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.black)),
-                child: const Text("회원탈퇴", style: TextStyle(color: Colors.black)),
+            const Text("계정 정보", style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+              ),
+              child: Column(
+                children: [
+                  _buildSimpleRow("이메일", user?.email ?? ""),
+                  const Divider(height: 24, thickness: 0.5),
+                  _buildSimpleRow("닉네임", user?.nickname ?? ""),
+                ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 30),
+            const Text("계정 보안", style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            // 비밀번호 변경 버튼 - 설정 화면 메뉴 디자인과 동일하게 수정
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+              ),
+              child: ListTile(
+                leading: const Icon(Icons.lock_outline, color: Color(0xFF4CAF50)),
+                title: const Text("비밀번호 변경", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PasswordChangeStep1Screen())),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const Spacer(),
+            Center(
+              child: SizedBox(
+                width: 200,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: () {
+                    _showDeleteAccountDialog(context, authVM);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.amber,
+                    foregroundColor: Colors.white,
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                  ),
+                  child: const Text("회원탈퇴", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 80),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildActionItem(String title, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        decoration: BoxDecoration(color: const Color(0xFFFDF5E6), border: Border.all(color: Colors.black)),
-        child: Text(title, style: const TextStyle(fontSize: 18)),
+  Widget _buildSimpleRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 16, color: Colors.black87)),
+          Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.black)),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteAccountDialog(BuildContext context, AuthViewModel authVM) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("회원 탈퇴"),
+        content: const Text("정말 탈퇴하시겠습니까? 모든 데이터가 삭제되며 복구할 수 없습니다."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("취소")),
+          TextButton(onPressed: () async {
+            await authVM.deleteAccount();
+            if (ctx.mounted) {
+              Navigator.pop(ctx);
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            }
+          }, child: const Text("탈퇴하기", style: TextStyle(color: Colors.red))),
+        ],
       ),
     );
   }
 }
 
 // -----------------------------------------------------------------------------
-// 7. 비밀번호 변경 - 1단계: 현재 비번 확인 (이미지2 중간)
+// 7. 비밀번호 변경 - 1단계: 현재 비번 확인
 // -----------------------------------------------------------------------------
 class PasswordChangeStep1Screen extends StatefulWidget {
   const PasswordChangeStep1Screen({super.key});
@@ -629,64 +717,72 @@ class _PasswordChangeStep1ScreenState extends State<PasswordChangeStep1Screen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF2ECC71),
-        title: const Text("비밀번호 변경", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF4CAF50),
+        title: const Text("비밀번호 확인", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         elevation: 0,
-        actions: [IconButton(icon: const Icon(Icons.menu), onPressed: () {})],
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const Icon(Icons.pets, size: 80, color: Colors.amber),
-            const SizedBox(height: 20),
-            const Text("댕댕워킹", style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 40),
-            const Text("비밀번호 확인", style: TextStyle(fontSize: 18)),
-            const SizedBox(height: 10),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10), 
-              decoration: BoxDecoration(border: Border.all(color: Colors.black)),
-              child: Text(user?.email ?? "", style: const TextStyle(fontSize: 18)),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _pwCtrl,
-              obscureText: true,
-              decoration: const InputDecoration(
-                hintText: "비밀번호를 입력하세요..", 
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10), 
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.pets, size: 80, color: Colors.amber),
+              const SizedBox(height: 20),
+              const Text("댕댕워킹", style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 40),
+              const Text("보안을 위해 현재 비밀번호를 입력해주세요.", style: TextStyle(fontSize: 16, color: Colors.grey)),
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+                child: Text(user?.email ?? "", style: const TextStyle(fontSize: 16, color: Colors.black54)),
               ),
-            ),
-            const SizedBox(height: 20),
-            Center(
-              child: ElevatedButton(
-                onPressed: () async {
-                  if (_pwCtrl.text.isEmpty) return;
-                  final vm = context.read<AuthViewModel>();
-                  final success = await vm.reauthenticate(_pwCtrl.text);
-                  if (success) {
-                    if (mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => const PasswordChangeStep2Screen()));
-                  } else {
-                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(vm.errorMessage ?? "비밀번호가 틀렸습니다."), backgroundColor: Colors.redAccent));
-                  }
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black, side: const BorderSide(color: Colors.black)),
-                child: const Text("확인"),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _pwCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  hintText: "현재 비밀번호",
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            Center(
-              child: TextButton(
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ForgotPasswordScreen())),
-                child: const Text("비밀번호가 기억나지 않으세요?", style: TextStyle(color: Colors.grey, decoration: TextDecoration.underline)),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    if (_pwCtrl.text.isEmpty) return;
+                    final vm = context.read<AuthViewModel>();
+                    final success = await vm.reauthenticate(_pwCtrl.text);
+                    if (success) {
+                      if (mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => const PasswordChangeStep2Screen()));
+                    } else {
+                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(vm.errorMessage ?? "비밀번호가 틀렸습니다."), backgroundColor: Colors.redAccent));
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.amber,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text("확인"),
+                ),
               ),
-            ),
-            const SizedBox(height: 80),
-          ],
+              const SizedBox(height: 10),
+              Center(
+                child: TextButton(
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ForgotPasswordScreen())),
+                  child: const Text("비밀번호가 기억나지 않으세요?", style: TextStyle(color: Colors.grey, decoration: TextDecoration.underline)),
+                ),
+              ),
+              const SizedBox(height: 80),
+            ],
+          ),
         ),
       ),
     );
@@ -694,7 +790,7 @@ class _PasswordChangeStep1ScreenState extends State<PasswordChangeStep1Screen> {
 }
 
 // -----------------------------------------------------------------------------
-// 8. 비밀번호 변경 - 2단계: 새 비번 입력 (이미지2 우측)
+// 8. 비밀번호 변경 - 2단계: 새 비번 입력
 // -----------------------------------------------------------------------------
 class PasswordChangeStep2Screen extends StatefulWidget {
   const PasswordChangeStep2Screen({super.key});
@@ -712,50 +808,74 @@ class _PasswordChangeStep2ScreenState extends State<PasswordChangeStep2Screen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF2ECC71),
-        title: const Text("비밀번호 변경", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF4CAF50),
+        title: const Text("새 비밀번호 설정", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         elevation: 0,
-        actions: [IconButton(icon: const Icon(Icons.menu), onPressed: () {})],
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const Icon(Icons.pets, size: 80, color: Colors.amber),
-            const SizedBox(height: 20),
-            const Text("댕댕워킹", style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 40),
-            const Text("비밀번호 변경", style: TextStyle(fontSize: 18)),
-            const SizedBox(height: 20),
-            _buildPwField("변경할 비밀번호", _newPwCtrl),
-            const SizedBox(height: 10),
-            _buildPwField("변경 비밀번호 확인", _confirmPwCtrl),
-            const SizedBox(height: 40),
-            Center(
-              child: ElevatedButton(
-                onPressed: () async {
-                  if (_newPwCtrl.text.isEmpty || _newPwCtrl.text != _confirmPwCtrl.text) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("비밀번호가 일치하지 않습니다.")));
-                    return;
-                  }
-                  try {
-                    await FirebaseAuth.instance.currentUser?.updatePassword(_newPwCtrl.text);
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("비밀번호가 변경되었습니다. 다시 로그인해주세요.")));
-                      context.read<AuthViewModel>().logout();
-                      Navigator.of(context).popUntil((route) => route.isFirst);
-                    }
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("변경 실패: $e")));
-                  }
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black, side: const BorderSide(color: Colors.black)),
-                child: const Text("변경"),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.pets, size: 80, color: Colors.amber),
+              const SizedBox(height: 20),
+              const Text("댕댕워킹", style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 40),
+              const Text("새로운 비밀번호를 입력해주세요.", style: TextStyle(fontSize: 16)),
+              const SizedBox(height: 24),
+              TextField(
+                controller: _newPwCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: "새 비밀번호",
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
               ),
-            ),
-            const SizedBox(height: 80),
-          ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: _confirmPwCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: "비밀번호 확인",
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    if (_newPwCtrl.text.isEmpty || _newPwCtrl.text != _confirmPwCtrl.text) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("비밀번호가 일치하지 않습니다.")));
+                      return;
+                    }
+                    try {
+                      await FirebaseAuth.instance.currentUser?.updatePassword(_newPwCtrl.text);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("비밀번호가 변경되었습니다. 다시 로그인해주세요.")));
+                        context.read<AuthViewModel>().logout();
+                        Navigator.of(context).popUntil((route) => route.isFirst);
+                      }
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("변경 실패: $e")));
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.amber,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text("변경 완료"),
+                ),
+              ),
+              const SizedBox(height: 80),
+            ],
+          ),
         ),
       ),
     );
