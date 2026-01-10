@@ -160,6 +160,104 @@ class _SocialScreenState extends State<SocialScreen> {
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
+      onTap: () {
+        // [추가] 유저 클릭 시 상세 프로필로 이동
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => OtherUserProfileView(user: user),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class OtherUserProfileView extends StatelessWidget {
+  final UserModel user;
+
+  const OtherUserProfileView({super.key, required this.user});
+
+  @override
+  Widget build(BuildContext context) {
+    // SocialViewModel을 통해 팔로우 상태 감지 및 동작 수행
+    final socialVM = context.watch<SocialViewModel>();
+    final isFollowing = socialVM.isFollowing(user.uid);
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: Text("${user.nickname}님의 프로필",
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF4CAF50),
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Column(
+        children: [
+          // 1. 유저 정보 상단 (이미지, 이름, 팔로우 버튼)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 35, 15, 25),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 45,
+                  backgroundColor: Colors.grey[200],
+                  backgroundImage: (user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty)
+                      ? NetworkImage(user.profileImageUrl!)
+                      : null,
+                  child: (user.profileImageUrl == null || user.profileImageUrl!.isEmpty)
+                      ? const Icon(Icons.person, size: 45, color: Colors.white)
+                      : null,
+                ),
+                const SizedBox(width: 15),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(user.nickname,
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      Text(user.bio ?? "안녕하세요!",
+                          style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                      const SizedBox(height: 8),
+                      // 통계 정보
+                      Row(
+                        children: [
+                          Text("게시물 ${user.stats.postCount}", style: const TextStyle(fontSize: 12)),
+                          const SizedBox(width: 10),
+                          Text("팔로우 ${user.stats.followingCount}", style: const TextStyle(fontSize: 12)),
+                          const SizedBox(width: 10),
+                          Text("팔로워 ${user.stats.followerCount}", style: const TextStyle(fontSize: 12)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                // [변경] 프로필 편집 버튼 대신 팔로우/언팔로우 버튼
+                ElevatedButton(
+                  onPressed: () => socialVM.toggleFollow(user.uid),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isFollowing ? Colors.grey[300] : Colors.amber,
+                    foregroundColor: isFollowing ? Colors.black87 : Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: Text(isFollowing ? "팔로잉" : "팔로우",
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+          const Divider(),
+
+          // 2. 해당 유저의 산책 기록 리스트 (필요 시 추가 구현)
+          const Expanded(
+            child: Center(
+              child: Text("기능 준비 중입니다.", style: TextStyle(color: Colors.grey)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
