@@ -5,6 +5,7 @@ import 'models.dart';
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Timestamp 사용을 위해 추가
+import 'dart:async';
 
 class PetViewModel with ChangeNotifier {
   final PetRepository _repo = PetRepository();
@@ -17,8 +18,41 @@ class PetViewModel with ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
+  StreamSubscription<List<PetModel>>? _petsSubscription;
+
   PetViewModel() {
-    fetchMyPets();
+    _setupPetsStream();
+  }
+
+  // 실시간 스트림 설정
+  void _setupPetsStream() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    _isLoading = true;
+    notifyListeners();
+
+    _petsSubscription?.cancel();
+    _petsSubscription = _repo.petsStream(uid).listen(
+      (pets) {
+        // 대표 반려동물이 리스트 맨 위로 오도록 정렬
+        _pets = pets;
+        _pets.sort((a, b) => (b.isPrimary ? 1 : 0).compareTo(a.isPrimary ? 1 : 0));
+        _isLoading = false;
+        notifyListeners();
+      },
+      onError: (error) {
+        print("펫 스트림 오류: $error");
+        _isLoading = false;
+        notifyListeners();
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _petsSubscription?.cancel();
+    super.dispose();
   }
 
   // [도움함수] 이미지 업로드 로직 (중복 제거)
@@ -48,25 +82,13 @@ class PetViewModel with ChangeNotifier {
     }
   }
 
-  // 내 펫 목록 불러오기
+  // 내 펫 목록 불러오기 (단발성 쿼리 - 필요시 사용)
   Future<void> fetchMyPets() async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
 
-    _isLoading = true;
-    try {
-      _pets = await _repo.getPets(uid);
-
-      // 대표 반려동물이 리스트 맨 위로 오도록 정렬
-      _pets.sort((a, b) => (b.isPrimary ? 1 : 0).compareTo(a.isPrimary ? 1 : 0));
-
-      notifyListeners();
-    } catch (e) {
-      print("펫 불러오기 실패: $e");
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+    // 스트림이 이미 설정되어 있으므로 재설정
+    _setupPetsStream();
   }
 
   // 대표 반려동물 설정
@@ -103,8 +125,7 @@ class PetViewModel with ChangeNotifier {
       }
       // -------------------------------------------------------
 
-      // 3. 목록 새로고침
-      await fetchMyPets();
+      // 스트림이 자동으로 업데이트하므로 별도 새로고침 불필요
 
     } catch (e) {
       print("대표 펫 설정 실패: $e");
@@ -149,7 +170,7 @@ class PetViewModel with ChangeNotifier {
         imageUrl: imageUrl, // Repository가 이 인자를 받도록 구현되어 있어야 함
       );
 
-      await fetchMyPets();
+      // 스트림이 자동으로 업데이트하므로 별도 새로고침 불필요
     } catch (e) {
       print("펫 추가 실패: $e");
       rethrow;
@@ -207,8 +228,7 @@ class PetViewModel with ChangeNotifier {
   Future<void> deletePet(String petId) async {
     try {
       await _repo.deletePet(petId);
-      _pets.removeWhere((pet) => pet.id == petId);
-      notifyListeners();
+      // 스트림이 자동으로 업데이트하므로 별도 제거 불필요
     } catch (e) {
       print("삭제 실패: $e");
       rethrow;

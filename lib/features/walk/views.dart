@@ -71,23 +71,116 @@ class _WalkScreenState extends State<WalkScreen> {
               const Text("오늘도 즐거운 산책 해보아용 >.<",
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 20),
-              // 펫 선택 드롭다운
+              // 여러 반려동물 선택 체크박스
               if (vm.myPets.isNotEmpty)
-                DropdownButton<Map<String, dynamic>>(
-                  value: vm.selectedPet,
-                  items: vm.myPets.map((pet) =>
-                      DropdownMenuItem(
-                        value: pet,
-                        child: Text(pet['name'] ?? '강아지'),
-                      )).toList(),
-                  onChanged: (val) => vm.selectPet(val),
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.9),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 10,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "산책할 반려동물 선택",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ...vm.myPets.map((pet) {
+                        final petId = pet['id'] as String? ?? '';
+                        final petName = pet['name'] as String? ?? '강아지';
+                        final isPrimary = pet['isPrimary'] == true;
+                        final isSelected = vm.isPetSelected(petId);
+                        
+                        return CheckboxListTile(
+                          value: isSelected,
+                          onChanged: (value) => vm.togglePetSelection(petId),
+                          title: Row(
+                            children: [
+                              Text(
+                                petName,
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                              if (isPrimary) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFD700),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    "대표",
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          activeColor: const Color(0xFF4CAF50),
+                          contentPadding: EdgeInsets.zero,
+                        );
+                      }).toList(),
+                      if (vm.selectedPetIds.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: Text(
+                            "최소 1마리의 반려동물을 선택해주세요.",
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.red,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               const SizedBox(height: 30),
               // [수정] START 버튼에 발바닥 아이콘 추가
               GestureDetector(
                 onTap: () async {
+                  // 선택된 반려동물이 없으면 경고
+                  if (vm.selectedPetIds.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("최소 1마리의 반려동물을 선택해주세요."),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
                   // [수정] 시작 시 사용자의 위치를 중심으로 잡아줌 [요구사항 3]
-                  await vm.startWalk(['pet_dummy_id']);
+                  try {
+                    await vm.startWalk(vm.selectedPetIds.toList());
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text("산책 시작 실패: ${e.toString()}"),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
                 },
                 child: Container(
                   width: 200, height: 200,
@@ -197,7 +290,7 @@ class _WalkScreenState extends State<WalkScreen> {
               IconButton(
                 icon: const Icon(Icons.arrow_back_ios, size: 30),
                 onPressed: vm.currentImageIndex > 0
-                    ? () => setState(() => vm.currentImageIndex--)
+                    ? () => vm.setCurrentImageIndexDecrement()
                     : null,
                 color: vm.currentImageIndex > 0 ? Colors.black : Colors.grey.withOpacity(0.3),
               ),
@@ -260,7 +353,7 @@ class _WalkScreenState extends State<WalkScreen> {
               IconButton(
                 icon: const Icon(Icons.arrow_forward_ios, size: 30),
                 onPressed: vm.currentImageIndex < vm.reviewImages.length - 1
-                    ? () => setState(() => vm.currentImageIndex++)
+                    ? () => vm.setCurrentImageIndexIncrement()
                     : null,
                 color: vm.currentImageIndex < vm.reviewImages.length - 1
                     ? Colors.black
@@ -297,6 +390,11 @@ class _WalkScreenState extends State<WalkScreen> {
           TextField(
             controller: vm.reviewController,
             maxLines: 3,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) {
+              // 엔터를 누르면 키보드 내리기
+              FocusScope.of(context).unfocus();
+            },
             decoration: InputDecoration(
               hintText: "산책 후기를 남겨주세요...",
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -305,10 +403,12 @@ class _WalkScreenState extends State<WalkScreen> {
           const SizedBox(height: 25),
 
           // 이모지 선택 영역
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: ['👍', '👌', '❤️', '💧', '👎'].map((e) => GestureDetector(
-              onTap: () => setState(() => vm.selectedEmoji = e),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 12,
+            runSpacing: 12,
+            children: ['👍', '👌', '❤️', '💧', '👎', '🐕', '🐈', '🐶', '😊', '😍', '🥰', '😎', '🤗', '🎉', '✨', '🌟', '💪', '🏃', '🌳', '☀️'].map((e) => GestureDetector(
+              onTap: () => vm.setSelectedEmoji(e),
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
