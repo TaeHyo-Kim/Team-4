@@ -1,4 +1,6 @@
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../core/notification_service.dart';
 
 // 각 기능별 모델들을 import 합니다.
 import '../features/auth/models.dart';
@@ -112,6 +114,7 @@ class PetRepository {
 // -----------------------------------------------------------------------------
 class SocialRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final NotificationService _notificationService = NotificationService();
 
   // 전체 유저 목록 조회 (나 자신 제외)
   Future<List<UserModel>> getAllUsers(String myUid) async {
@@ -133,6 +136,54 @@ class SocialRepository {
     return snapshot.docs.map((doc) => doc.id).toSet();
   }
 
+  // 팔로잉한 사용자 목록 조회 (UserModel 리스트)
+  Future<List<UserModel>> getFollowingUsers(String userId) async {
+    final followingSnapshot = await _db
+        .collection('users')
+        .doc(userId)
+        .collection('following')
+        .get();
+
+    if (followingSnapshot.docs.isEmpty) return [];
+
+    final userIds = followingSnapshot.docs.map((doc) => doc.id).toList();
+    
+    // 각 사용자 정보를 가져오기
+    final users = <UserModel>[];
+    for (final uid in userIds) {
+      final userDoc = await _db.collection('users').doc(uid).get();
+      if (userDoc.exists) {
+        users.add(UserModel.fromDocument(userDoc));
+      }
+    }
+
+    return users;
+  }
+
+  // 팔로워 목록 조회 (UserModel 리스트)
+  Future<List<UserModel>> getFollowerUsers(String userId) async {
+    final followersSnapshot = await _db
+        .collection('users')
+        .doc(userId)
+        .collection('followers')
+        .get();
+
+    if (followersSnapshot.docs.isEmpty) return [];
+
+    final userIds = followersSnapshot.docs.map((doc) => doc.id).toList();
+    
+    // 각 사용자 정보를 가져오기
+    final users = <UserModel>[];
+    for (final uid in userIds) {
+      final userDoc = await _db.collection('users').doc(uid).get();
+      if (userDoc.exists) {
+        users.add(UserModel.fromDocument(userDoc));
+      }
+    }
+
+    return users;
+  }
+
   // 팔로우 실행 (안정성 강화 버전)
   Future<void> followUser({required String myUid, required String targetUid}) async {
     final myRef = _db.collection('users').doc(myUid);
@@ -141,6 +192,8 @@ class SocialRepository {
     final followerRef = targetRef.collection('followers').doc(myUid);
 
     try {
+      String? myNickname;
+      
       await _db.runTransaction((transaction) async {
         // 읽기는 항상 쓰기보다 먼저!
         final myDoc = await transaction.get(myRef);
@@ -149,6 +202,10 @@ class SocialRepository {
 
         if (followDoc.exists) return; // 이미 팔로우 중이면 무시
         if (!myDoc.exists || !targetDoc.exists) return;
+
+        // 내 닉네임 저장 (알림 전송용)
+        final myData = myDoc.data() as Map<String, dynamic>?;
+        myNickname = myData?['nickname'] as String?;
 
         // 쓰기 작업
         transaction.set(followRef, {'createdAt': FieldValue.serverTimestamp()});
@@ -160,6 +217,25 @@ class SocialRepository {
         // 상대방 정보 업데이트 (followerCount +1)
         transaction.update(targetRef, {'stats.followerCount': FieldValue.increment(1)});
       });
+
+      // 팔로우 알림 전송 (비동기로 처리, 실패해도 팔로우는 유지)
+      if (myNickname != null) {
+        try {
+          debugPrint('팔로우 알림 전송 시도: follower=$myUid, followed=$targetUid, nickname=$myNickname');
+          await _notificationService.sendFollowNotification(
+            followerId: myUid,
+            followedUserId: targetUid,
+            followerNickname: myNickname!,
+          );
+          debugPrint('팔로우 알림 전송 완료');
+        } catch (e, stackTrace) {
+          debugPrint("팔로우 알림 전송 실패: $e");
+          debugPrint("스택 트레이스: $stackTrace");
+          // 알림 전송 실패해도 팔로우는 성공으로 처리
+        }
+      } else {
+        debugPrint('팔로우 알림 전송 실패: myNickname이 null입니다');
+      }
     } catch (e) {
       print("Follow Transaction Error: $e");
       rethrow; // ViewModel에서 에러를 잡아 스낵바를 띄우게 함
@@ -191,6 +267,60 @@ class SocialRepository {
       }
     });
   }
+
+  // SocialRepository 클래스 내에 추가
+  // 유저 차단 (안정성 강화)
+  Future<void> blockUser({required String myUid, required String targetUid}) async {
+    final myRef = _db.collection('users').doc(myUid);
+
+    // 1. 내 차단 목록에 추가 (성공 시 차단됨)
+    await myRef.collection('blockedUsers').doc(targetUid).set({
+      'blockedAt': FieldValue.serverTimestamp(),
+    });
+
+    // 2. 내가 상대방을 팔로우하고 있었다면 해제 (내 권한 내에서 가능)
+    try {
+      await unfollowUser(myUid: myUid, targetUid: targetUid);
+    } catch (e) {
+      // 팔로우 중이 아니었거나 에러가 나도 차단 자체는 진행되도록 무시
+      print("Block-Unfollow error: $e");
+    }
+  }
+
+  // 유저 차단 해제
+  Future<void> unblockUser({required String myUid, required String targetUid}) async {
+    await _db
+        .collection('users')
+        .doc(myUid)
+        .collection('blockedUsers')
+        .doc(targetUid)
+        .delete();
+  }
+
+  // 차단된 유저 ID 목록 조회
+  Future<Set<String>> getBlockedUserIds(String myUid) async {
+    final snapshot = await _db
+        .collection('users')
+        .doc(myUid)
+        .collection('blockedUsers')
+        .get();
+    return snapshot.docs.map((doc) => doc.id).toSet();
+  }
+
+  // 차단된 유저 상세 정보 목록 조회 (관리 화면용)
+  Future<List<UserModel>> getBlockedUsers(String myUid) async {
+    final ids = await getBlockedUserIds(myUid);
+    if (ids.isEmpty) return [];
+
+    // IDs가 많을 경우 10개씩 끊어서 처리해야 함(Firestore limit)
+    // 여기서는 간단하게 개별 조회 후 합치는 방식으로 설명
+    List<UserModel> users = [];
+    for (String id in ids) {
+      final doc = await _db.collection('users').doc(id).get();
+      if (doc.exists) users.add(UserModel.fromDocument(doc));
+    }
+    return users;
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -198,6 +328,7 @@ class SocialRepository {
 // -----------------------------------------------------------------------------
 class WalkRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final NotificationService _notificationService = NotificationService();
 
   // 산책 기록 저장
   Future<void> saveWalk(WalkRecordModel walk) async {
@@ -206,6 +337,28 @@ class WalkRepository {
         : _db.collection('walks').doc(walk.id);
 
     await docRef.set(walk.toMap());
+
+    // 공개 게시물인 경우에만 팔로워에게 알림 전송
+    if (walk.visibility == 'public') {
+      try {
+        // 사용자 정보 가져오기
+        final userDoc = await _db.collection('users').doc(walk.userId).get();
+        if (userDoc.exists) {
+          final userData = userDoc.data() as Map<String, dynamic>?;
+          final userNickname = userData?['nickname'] as String? ?? '사용자';
+          
+          // 팔로워에게 피드 알림 전송
+          await _notificationService.sendFeedNotification(
+            userId: walk.userId,
+            userNickname: userNickname,
+            postId: docRef.id,
+          );
+        }
+      } catch (e) {
+        print("피드 알림 전송 실패: $e");
+        // 알림 전송 실패해도 산책 기록 저장은 성공으로 처리
+      }
+    }
   }
 
   // 내 산책 기록 불러오기 (최신순 정렬)

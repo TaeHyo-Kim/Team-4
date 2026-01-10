@@ -10,6 +10,7 @@ class SocialViewModel with ChangeNotifier {
   List<UserModel> _allUsers = [];
   List<UserModel> _filteredUsers = [];
   Set<String> _followingIds = {};
+  Set<String> _blockedIds = {};
 
   // 현재 검색어 상태 저장 (팔로우 토글 시 리스트 유지를 위함)
   String _currentSearchQuery = '';
@@ -33,6 +34,7 @@ class SocialViewModel with ChangeNotifier {
       _allUsers = await _repo.getAllUsers(myUid);
       _followingIds = await _repo.getMyFollowingIds(myUid);
 
+      _blockedIds = await _repo.getBlockedUserIds(myUid);
       // 초기 로드 시 검색어가 없으므로 팔로잉 중인 유저만 필터링
       _applyFilter();
 
@@ -44,18 +46,15 @@ class SocialViewModel with ChangeNotifier {
     }
   }
 
-  // 검색 및 필터링 핵심 로직
+  // 필터링 로직 수정 (차단된 유저는 안 보이게)
   void _applyFilter() {
+    var baseUsers = _allUsers.where((u) => !_blockedIds.contains(u.uid));
+
     if (_currentSearchQuery.isEmpty) {
-      // 검색어가 없으면: 내가 팔로우한 유저만 표시
-      _filteredUsers = _allUsers.where((user) {
-        return _followingIds.contains(user.uid);
-      }).toList();
+      _filteredUsers = baseUsers.where((user) => _followingIds.contains(user.uid)).toList();
     } else {
-      // 검색어가 있으면: 전체 유저 중에서 닉네임 검색
-      _filteredUsers = _allUsers.where((user) {
-        return user.nickname.toLowerCase().contains(_currentSearchQuery.toLowerCase());
-      }).toList();
+      _filteredUsers = baseUsers.where((user) =>
+          user.nickname.toLowerCase().contains(_currentSearchQuery.toLowerCase())).toList();
     }
   }
 
@@ -103,5 +102,23 @@ class SocialViewModel with ChangeNotifier {
     }
   }
 
+  // 차단 실행
+  Future<void> toggleBlock(String targetUid) async {
+    final myUid = _auth.currentUser?.uid;
+    if (myUid == null) return;
+
+    if (_blockedIds.contains(targetUid)) {
+      await _repo.unblockUser(myUid: myUid, targetUid: targetUid);
+      _blockedIds.remove(targetUid);
+    } else {
+      await _repo.blockUser(myUid: myUid, targetUid: targetUid);
+      _blockedIds.add(targetUid);
+      _followingIds.remove(targetUid); // 차단 시 팔로우 해제 반영
+    }
+    _applyFilter();
+    notifyListeners();
+  }
+
   bool isFollowing(String uid) => _followingIds.contains(uid);
+  bool isBlocked(String uid) => _blockedIds.contains(uid);
 }

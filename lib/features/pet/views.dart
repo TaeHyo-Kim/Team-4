@@ -2,8 +2,10 @@ import 'dart:io'; // 파일 처리를 위해 추가
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:permission_handler/permission_handler.dart' as ph;
 import 'viewmodels.dart';
 import 'models.dart';
+import '../../core/permission_service.dart';
 
 // [1] 펫 목록을 보여주는 위젯
 class PetScreen extends StatelessWidget {
@@ -35,6 +37,7 @@ class PetScreen extends StatelessWidget {
       backgroundColor: Colors.white,
       // 초록색 헤더
       appBar: AppBar(
+        key: const ValueKey('pet_appbar'),
         backgroundColor: const Color(0xFF4CAF50),
         title: const Text(
           "반려동물",
@@ -308,6 +311,7 @@ class _PetRegistrationScreenState extends State<PetRegistrationScreen> {
   File? _imageFile; // 새로 선택한 이미지 파일
   String? _existingImageUrl; // 기존 수정 모드일 때의 이미지 URL
   final ImagePicker _picker = ImagePicker();
+  final PermissionService _permissionService = PermissionService();
 
   late TextEditingController _nameCtrl;
   late TextEditingController _breedCtrl;
@@ -339,6 +343,21 @@ class _PetRegistrationScreenState extends State<PetRegistrationScreen> {
   }
 // 이미지 선택 함수
   Future<void> _pickImage() async {
+    // 이미지 권한 확인
+    final photosStatus = await _permissionService.getPhotosPermissionStatus();
+    if (photosStatus != ph.PermissionStatus.granted) {
+      // 권한이 없으면 요청
+      final granted = await _permissionService.requestPhotosPermission();
+      if (!granted) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('이미지 권한이 필요합니다. 설정에서 권한을 허용해주세요.')),
+        );
+        return;
+      }
+    }
+
+    // 권한이 있으면 이미지 선택
     final XFile? pickedFile = await _picker.pickImage(
       source: ImageSource.gallery,
       imageQuality: 80, // 용량 절약을 위한 압축

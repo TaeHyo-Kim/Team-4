@@ -3,12 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:permission_handler/permission_handler.dart' as ph;
 import 'viewmodels.dart';
 import '../pet/views.dart';
 import '../../data/repositories.dart';
 import '../walk/models.dart';
 import '../profile/viewmodels.dart';
+import 'permission_request_view.dart';
+import '../../core/permission_service.dart';
+import '../../core/notification_service.dart';
 
+//원복
 // -----------------------------------------------------------------------------
 // 1. 로그인 화면 (LoginScreen)
 // -----------------------------------------------------------------------------
@@ -232,7 +237,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (vm.errorMessage != null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(vm.errorMessage!), backgroundColor: Colors.redAccent));
     } else if (mounted) {
-      Navigator.pop(context);
+      // 회원가입 성공 시 권한 요청 화면으로 이동
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const PermissionRequestView()),
+      );
     }
   }
 
@@ -337,6 +346,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
+        key: const ValueKey('auth_profile_appbar'),
         backgroundColor: const Color(0xFF4CAF50),
         title: const Text("프로필", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         elevation: 0,
@@ -404,26 +414,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: _isLoadingWalks
                   ? const Center(child: CircularProgressIndicator())
                   : _walkRecords.isEmpty
-                      ? const Center(child: Padding(padding: EdgeInsets.all(40.0), child: Text("아직 산책 기록이 없습니다.", style: TextStyle(color: Colors.grey, fontSize: 14))))
-                      : GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 4, mainAxisSpacing: 4),
-                          itemCount: _walkRecords.length,
-                          itemBuilder: (context, index) {
-                            final walk = _walkRecords[index];
-                            final photoUrl = walk.photoUrls.isNotEmpty ? walk.photoUrls[0] : null;
-                            return GestureDetector(
-                              onTap: () => _showWalkDetail(context, walk),
-                              child: Container(
-                                decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4)),
-                                child: photoUrl != null && photoUrl.isNotEmpty
-                                    ? ClipRRect(borderRadius: BorderRadius.circular(4), child: Image.network(photoUrl, fit: BoxFit.cover))
-                                    : const Icon(Icons.directions_walk, size: 40, color: Colors.grey),
-                              ),
-                            );
-                          },
-                        ),
+                  ? const Center(child: Padding(padding: EdgeInsets.all(40.0), child: Text("아직 산책 기록이 없습니다.", style: TextStyle(color: Colors.grey, fontSize: 14))))
+                  : GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 4, mainAxisSpacing: 4),
+                itemCount: _walkRecords.length,
+                itemBuilder: (context, index) {
+                  final walk = _walkRecords[index];
+                  final photoUrl = walk.photoUrls.isNotEmpty ? walk.photoUrls[0] : null;
+                  return GestureDetector(
+                    onTap: () => _showWalkDetail(context, walk),
+                    child: Container(
+                      decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4)),
+                      child: photoUrl != null && photoUrl.isNotEmpty
+                          ? ClipRRect(borderRadius: BorderRadius.circular(4), child: Image.network(photoUrl, fit: BoxFit.cover))
+                          : const Icon(Icons.directions_walk, size: 40, color: Colors.grey),
+                    ),
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -436,6 +446,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final bioCtrl = TextEditingController(text: user?.bio ?? '');
     File? selectedImage;
     final picker = ImagePicker();
+    final permissionService = PermissionService();
 
     showDialog(
       context: context,
@@ -448,6 +459,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 GestureDetector(
                   onTap: () async {
+                    // 이미지 권한 확인
+                    final photosStatus = await permissionService.getPhotosPermissionStatus();
+                    if (photosStatus != ph.PermissionStatus.granted) {
+                      // 권한이 없으면 요청
+                      final granted = await permissionService.requestPhotosPermission();
+                      if (!granted) {
+                        if (!ctx.mounted) return;
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(content: Text('이미지 권한이 필요합니다. 설정에서 권한을 허용해주세요.')),
+                        );
+                        return;
+                      }
+                    }
+
+                    // 권한이 있으면 이미지 선택
                     final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery);
                     if (pickedFile != null) setDialogState(() => selectedImage = File(pickedFile.path));
                   },
@@ -507,6 +533,7 @@ class SettingsScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
+        key: const ValueKey('settings_appbar'),
         backgroundColor: const Color(0xFF4CAF50),
         title: const Text("설정", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         elevation: 0,
@@ -517,7 +544,7 @@ class SettingsScreen extends StatelessWidget {
           const SizedBox(height: 20),
           _buildMenuItem(context, Icons.person_outline, "계정 관리", () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountManagementScreen()))),
           _buildMenuItem(context, Icons.visibility_outlined, "공개 범위", () {}),
-          _buildMenuItem(context, Icons.lock_open_outlined, "권한 관리", () {}),
+          _buildMenuItem(context, Icons.lock_open_outlined, "권한 관리", () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PermissionManagementScreen()))),
           _buildMenuItem(context, Icons.block_flipped, "차단된 계정", () {}),
           const Spacer(),
           Padding(
@@ -593,6 +620,7 @@ class AccountManagementScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
+        key: const ValueKey('account_management_appbar'),
         backgroundColor: const Color(0xFF4CAF50),
         title: const Text("계정 관리", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         elevation: 0,
@@ -887,15 +915,514 @@ class _PasswordChangeStep2ScreenState extends State<PasswordChangeStep2Screen> {
         SizedBox(width: 120, child: Text(label, style: const TextStyle(fontSize: 14))),
         Expanded(
           child: TextField(
-            controller: ctrl, 
-            obscureText: true, 
+            controller: ctrl,
+            obscureText: true,
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), 
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
+// 8. 권한 관리 화면 (PermissionManagementScreen)
+// -----------------------------------------------------------------------------
+class PermissionManagementScreen extends StatefulWidget {
+  const PermissionManagementScreen({super.key});
+
+  @override
+  State<PermissionManagementScreen> createState() => _PermissionManagementScreenState();
+}
+
+class _PermissionManagementScreenState extends State<PermissionManagementScreen> with WidgetsBindingObserver {
+  final PermissionService _permissionService = PermissionService();
+  final NotificationService _notificationService = NotificationService();
+
+  bool _notificationGranted = false;
+  bool _locationGranted = false;
+  bool _photosGranted = false;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkPermissions();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 앱이 포그라운드로 돌아올 때 권한 상태 재확인
+    if (state == AppLifecycleState.resumed) {
+      _checkPermissions();
+    }
+  }
+
+  Future<void> _checkPermissions() async {
+    setState(() => _isLoading = true);
+    // 실제 시스템 권한 상태 확인
+    final notificationStatus = await _permissionService.getNotificationPermissionStatus();
+    final locationStatus = await _permissionService.getLocationPermissionStatus();
+    final photosStatus = await _permissionService.getPhotosPermissionStatus();
+
+    final actualNotificationGranted = notificationStatus.isGranted;
+    final actualLocationGranted = locationStatus.isGranted;
+    final actualPhotosGranted = photosStatus.isGranted;
+
+    // Firestore에도 실제 상태 반영
+    if (actualNotificationGranted != _notificationGranted) {
+      await _permissionService.updatePermissionStatus('notification', actualNotificationGranted);
+    }
+    if (actualLocationGranted != _locationGranted) {
+      await _permissionService.updatePermissionStatus('location', actualLocationGranted);
+    }
+    if (actualPhotosGranted != _photosGranted) {
+      await _permissionService.updatePermissionStatus('photos', actualPhotosGranted);
+    }
+
+    setState(() {
+      _notificationGranted = actualNotificationGranted;
+      _locationGranted = actualLocationGranted;
+      _photosGranted = actualPhotosGranted;
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _requestNotificationPermission() async {
+    setState(() => _isLoading = true);
+    try {
+      final granted = await _permissionService.requestNotificationPermission();
+      setState(() {
+        _notificationGranted = granted;
+        _isLoading = false;
+      });
+      if (granted) {
+        await _notificationService.initialize();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('알림 권한이 허용되었습니다.')),
+        );
+      } else {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('알림 권한이 거부되었습니다'),
+            content: const Text('설정에서 권한을 허용하시겠습니까?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('나중에'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _permissionService.openAppSettings();
+                },
+                child: const Text('설정으로 이동'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('알림 권한 요청 실패: $e')),
+      );
+    }
+  }
+
+  Future<void> _disableNotificationPermission() async {
+    // Android에서는 프로그래밍적으로 권한을 거부할 수 없으므로 설정 앱으로 이동
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('알림 권한 비활성화'),
+        content: const Text('알림 권한을 비활성화하려면 설정 앱에서 직접 변경해야 합니다. 설정으로 이동하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _permissionService.openAppSettings();
+              // 설정에서 돌아올 때 권한 상태 재확인
+              Future.delayed(const Duration(seconds: 2), () {
+                _checkPermissions();
+              });
+            },
+            child: const Text('설정으로 이동'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _requestLocationPermission() async {
+    setState(() => _isLoading = true);
+    try {
+      final granted = await _permissionService.requestLocationPermission();
+      setState(() {
+        _locationGranted = granted;
+        _isLoading = false;
+      });
+      if (granted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('위치 권한이 허용되었습니다.')),
+        );
+      } else {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('위치 권한이 거부되었습니다'),
+            content: const Text('설정에서 권한을 허용하시겠습니까?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('나중에'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _permissionService.openAppSettings();
+                },
+                child: const Text('설정으로 이동'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('위치 권한 요청 실패: $e')),
+      );
+    }
+  }
+
+  Future<void> _disableLocationPermission() async {
+    // Android에서는 프로그래밍적으로 권한을 거부할 수 없으므로 설정 앱으로 이동
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('위치 권한 비활성화'),
+        content: const Text('위치 권한을 비활성화하려면 설정 앱에서 직접 변경해야 합니다. 설정으로 이동하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _permissionService.openAppSettings();
+              // 설정에서 돌아올 때 권한 상태 재확인
+              Future.delayed(const Duration(seconds: 2), () {
+                _checkPermissions();
+              });
+            },
+            child: const Text('설정으로 이동'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _requestPhotosPermission() async {
+    setState(() => _isLoading = true);
+    try {
+      final granted = await _permissionService.requestPhotosPermission();
+      setState(() {
+        _photosGranted = granted;
+        _isLoading = false;
+      });
+      if (granted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('이미지 권한이 허용되었습니다.')),
+        );
+      } else {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('이미지 권한이 거부되었습니다'),
+            content: const Text('설정에서 권한을 허용하시겠습니까?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('나중에'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _permissionService.openAppSettings();
+                },
+                child: const Text('설정으로 이동'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('이미지 권한 요청 실패: $e')),
+      );
+    }
+  }
+
+  Future<void> _disablePhotosPermission() async {
+    // Android에서는 프로그래밍적으로 권한을 거부할 수 없으므로 설정 앱으로 이동
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('이미지 권한 비활성화'),
+        content: const Text('이미지 권한을 비활성화하려면 설정 앱에서 직접 변경해야 합니다. 설정으로 이동하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _permissionService.openAppSettings();
+              // 설정에서 돌아올 때 권한 상태 재확인
+              Future.delayed(const Duration(seconds: 2), () {
+                _checkPermissions();
+              });
+            },
+            child: const Text('설정으로 이동'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPermissionDeniedDialog(String permissionType) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('$permissionType 권한이 거부되었습니다'),
+        content: const Text('설정에서 권한을 허용하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('나중에'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _permissionService.openAppSettings();
+            },
+            child: const Text('설정으로 이동'),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FA),
+      appBar: AppBar(
+        key: const ValueKey('permission_management_appbar'),
+        backgroundColor: const Color(0xFF4CAF50),
+        title: const Text(
+          "권한 관리",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+        onRefresh: _checkPermissions,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '앱 권한 설정',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '권한을 허용하면 더 나은 서비스를 이용하실 수 있습니다.',
+                style: TextStyle(color: Colors.grey[600], fontSize: 14),
+              ),
+              const SizedBox(height: 24),
+
+              // 알림 권한
+              _buildPermissionCard(
+                icon: Icons.notifications_outlined,
+                title: "알림",
+                description: "팔로우, 피드 업로드 등의 알림을 받을 수 있습니다",
+                isGranted: _notificationGranted,
+                onEnable: _requestNotificationPermission,
+                onDisable: _disableNotificationPermission,
+              ),
+              const SizedBox(height: 12),
+
+              // 위치 권한
+              _buildPermissionCard(
+                icon: Icons.location_on_outlined,
+                title: "위치",
+                description: "산책 경로 기록 및 주변 사용자 탐색에 필요합니다",
+                isGranted: _locationGranted,
+                onEnable: _requestLocationPermission,
+                onDisable: _disableLocationPermission,
+              ),
+              const SizedBox(height: 12),
+
+              // 이미지 권한
+              _buildPermissionCard(
+                icon: Icons.image_outlined,
+                title: "이미지",
+                description: "프로필 사진 및 반려동물 사진 등록에 필요합니다",
+                isGranted: _photosGranted,
+                onEnable: _requestPhotosPermission,
+                onDisable: _disablePhotosPermission,
+              ),
+
+              const SizedBox(height: 24),
+              Text(
+                '권한 상태는 실시간으로 업데이트됩니다. 새로고침을 눌러 최신 상태를 확인하세요.',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPermissionCard({
+    required IconData icon,
+    required String title,
+    required String description,
+    required bool isGranted,
+    required VoidCallback onEnable,
+    required VoidCallback onDisable,
+  }) {
+    return Card(
+      elevation: 2,
+      color: isGranted ? Colors.green[50] : Colors.grey[100],
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isGranted ? Colors.green : Colors.grey[300]!,
+          width: isGranted ? 2 : 1,
+        ),
+      ),
+      child: InkWell(
+        onTap: () {
+          if (isGranted) {
+            onDisable();
+          } else {
+            onEnable();
+          }
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isGranted ? Colors.green : Colors.grey[300],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  icon,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: isGranted ? Colors.green[900] : Colors.grey[800],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (isGranted)
+                          const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (isGranted) {
+                    onDisable();
+                  } else {
+                    onEnable();
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isGranted ? Colors.green : Colors.grey[400],
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+                child: Text(
+                  isGranted ? '활성화됨' : '활성화',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

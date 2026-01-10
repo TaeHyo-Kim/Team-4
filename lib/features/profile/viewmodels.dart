@@ -5,14 +5,22 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../auth/models.dart';
 import '../walk/models.dart';
+import '../../data/repositories.dart';
 
 class ProfileViewModel with ChangeNotifier {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
+  final SocialRepository _socialRepo = SocialRepository();
 
   List<WalkRecordModel> _walkRecords = [];
   List<WalkRecordModel> get walkRecords => _walkRecords;
+
+  List<UserModel> _followingUsers = [];
+  List<UserModel> _followerUsers = [];
+
+  List<UserModel> get followingUsers => _followingUsers;
+  List<UserModel> get followerUsers => _followerUsers;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -73,7 +81,7 @@ class ProfileViewModel with ChangeNotifier {
 
       // 3. DB 반영
       await _db.collection('users').doc(uid).update(updates);
-      
+
     } catch (e) {
       debugPrint("프로필 업데이트 실패: $e");
       rethrow;
@@ -95,6 +103,36 @@ class ProfileViewModel with ChangeNotifier {
       });
     } catch (e) {
       rethrow;
+    }
+  }
+
+  // 팔로잉 목록 가져오기
+  Future<void> fetchFollowingUsers(String userId) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      _followingUsers = await _socialRepo.getFollowingUsers(userId);
+    } catch (e) {
+      debugPrint("팔로잉 목록 로드 실패: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // 팔로워 목록 가져오기
+  Future<void> fetchFollowerUsers(String userId) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      _followerUsers = await _socialRepo.getFollowerUsers(userId);
+    } catch (e) {
+      debugPrint("팔로워 목록 로드 실패: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 }
