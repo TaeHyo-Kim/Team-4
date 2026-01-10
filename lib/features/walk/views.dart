@@ -31,7 +31,11 @@ class _WalkScreenState extends State<WalkScreen> {
     return Scaffold(
       appBar: AppBar(
           title: const Text("산책"), backgroundColor: const Color(0xFF4CAF50)),
-      body: _buildBodyByState(vm),
+      body: Listener(
+        onPointerDown: (_) => vm.onUserInteractionStarted(),
+        onPointerUp: (_) => vm.onUserInteractionEnded(),
+        child: _buildBodyByState(vm),
+      ),
     );
   }
 
@@ -64,10 +68,11 @@ class _WalkScreenState extends State<WalkScreen> {
               if (vm.myPets.isNotEmpty)
                 DropdownButton<Map<String, dynamic>>(
                   value: vm.selectedPet,
-                  items: vm.myPets.map((pet) => DropdownMenuItem(
-                    value: pet,
-                    child: Text(pet['name'] ?? '강아지'),
-                  )).toList(),
+                  items: vm.myPets.map((pet) =>
+                      DropdownMenuItem(
+                        value: pet,
+                        child: Text(pet['name'] ?? '강아지'),
+                      )).toList(),
                   onChanged: (val) => vm.selectPet(val),
                 ),
               const SizedBox(height: 30),
@@ -82,40 +87,59 @@ class _WalkScreenState extends State<WalkScreen> {
                   decoration: BoxDecoration(
                       color: const Color(0xFFFF9800),
                       shape: BoxShape.circle,
-                      boxShadow: [BoxShadow(color: Colors.orange.withOpacity(0.3), blurRadius: 15, spreadRadius: 5)]
+                      boxShadow: [
+                        BoxShadow(color: Colors.orange.withOpacity(0.3),
+                            blurRadius: 15,
+                            spreadRadius: 5)
+                      ]
                   ),
                   child: const Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.pets, size: 60, color: Colors.white), // 발바닥 아이콘 복구
+                      Icon(Icons.pets, size: 60, color: Colors.white),
+                      // 발바닥 아이콘 복구
                       SizedBox(height: 8),
-                      Text("START", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                      Text("START", style: TextStyle(color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
               ),
               const SizedBox(height: 40),
               // [수정] 최근 산책 기록 복구 [요구사항 2]
-              if (vm.recentWalk != null)
-                Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.symmetric(horizontal: 40),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(15),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text("최근 산책 기록", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      const SizedBox(height: 10),
-                      Text("어제 : ${vm.recentWalk!['duration'] ~/ 60}분, ${(vm.recentWalk!['distance'] as double).toStringAsFixed(1)}km",
-                          style: const TextStyle(color: Colors.grey)),
-                    ],
-                  ),
+              // [수정] 최근 산책 기록 표시 및 없을 경우 대사 표기 [요구사항 3]
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.symmetric(horizontal: 40),
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(15),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.black.withOpacity(0.05), blurRadius: 10)
+                    ]
                 ),
+                child: vm.recentWalk != null
+                    ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("최근 산책 기록", style: TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 10),
+                    Text("어제 : ${vm.recentWalk!['duration'] ~/ 60}분, ${(vm
+                        .recentWalk!['distance'] as double).toStringAsFixed(
+                        1)}km",
+                        style: const TextStyle(color: Colors.grey)),
+                  ],
+                )
+                    : const Center(
+                  child: Text("아직 산책 기록이 없어요.\n첫 산책을 시작해보세요!",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey, fontSize: 15)),
+                ),
+              ),
             ],
           ),
         ),
@@ -161,7 +185,6 @@ class _WalkScreenState extends State<WalkScreen> {
   // [수정] 후기 작성 UI: 인디케이터 및 화살표 로직 강화
   // [수정] 후기 작성 UI: 화살표 외부 배치, 텍스트 필드, 이모지 선택 효과 추가
   Widget _buildReview(WalkViewModel vm) {
-    // 후기 작성을 위한 컨트롤러 (ViewModel에서 관리하는 것이 좋습니다)
     final TextEditingController _memoController = TextEditingController(text: "");
 
     return SingleChildScrollView(
@@ -172,11 +195,10 @@ class _WalkScreenState extends State<WalkScreen> {
           const Text("오늘의 산책은 어떠셨나요?", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
 
-          // [1] 화살표가 상자 바깥쪽에 나오도록 Row로 감쌈 [요구사항 1]
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // 왼쪽 화살표
+              // 왼쪽 화살표 (반투명 로직 유지)
               Opacity(
                 opacity: vm.currentImageIndex > 0 ? 1.0 : 0.3,
                 child: IconButton(
@@ -184,18 +206,34 @@ class _WalkScreenState extends State<WalkScreen> {
                   onPressed: vm.currentImageIndex > 0 ? () => setState(() => vm.currentImageIndex--) : null,
                 ),
               ),
-              // 이미지 상자
-              Container(
-                width: 250, height: 250, // 화살표 공간 확보를 위해 크기 소폭 조정
-                decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(15)),
-                child: vm.reviewImages.isEmpty
-                    ? const Icon(Icons.image_not_supported, size: 80, color: Colors.grey)
-                    : ClipRRect(
-                  borderRadius: BorderRadius.circular(15),
-                  child: Image.file(File(vm.reviewImages[vm.currentImageIndex].path), fit: BoxFit.cover),
-                ),
+              // 이미지 상자 및 삭제 버튼 [요구사항 7]
+              Stack(
+                children: [
+                  Container(
+                    width: 250, height: 250,
+                    decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(15)),
+                    child: vm.reviewImages.isEmpty
+                        ? const Icon(Icons.image_not_supported, size: 80, color: Colors.grey)
+                        : ClipRRect(
+                      borderRadius: BorderRadius.circular(15),
+                      child: Image.file(File(vm.reviewImages[vm.currentImageIndex].path), fit: BoxFit.cover),
+                    ),
+                  ),
+                  // [추가] 이미지 우상단 X 버튼 [요구사항 7]
+                  if (vm.reviewImages.isNotEmpty)
+                    Positioned(
+                      top: 5, right: 5,
+                      child: GestureDetector(
+                        onTap: () => vm.removeImage(vm.currentImageIndex),
+                        child: Container(
+                          decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                          child: const Icon(Icons.close, color: Colors.white, size: 20),
+                        ),
+                      ),
+                    ),
+                ],
               ),
-              // 오른쪽 화살표
+              // 오른쪽 화살표 (개수 무제한 대응) [요구사항 2]
               Opacity(
                 opacity: vm.currentImageIndex < vm.reviewImages.length - 1 ? 1.0 : 0.3,
                 child: IconButton(
@@ -206,12 +244,14 @@ class _WalkScreenState extends State<WalkScreen> {
             ],
           ),
 
-          // 인디케이터 (색상 로직 유지)
+          // [수정] 인디케이터: 개수 제한 없이 모두 표기 [요구사항 2]
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: List.generate(vm.totalDots, (index) {
               Color dotColor = Colors.white;
-              if (index < vm.reviewImages.length) dotColor = (index == vm.currentImageIndex) ? Colors.black : Colors.grey;
+              if (vm.reviewImages.isNotEmpty) {
+                dotColor = (index == vm.currentImageIndex) ? Colors.black : Colors.grey;
+              }
               return Container(margin: const EdgeInsets.all(5), width: 10, height: 10, decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle, border: Border.all(color: Colors.black26)));
             }),
           ),

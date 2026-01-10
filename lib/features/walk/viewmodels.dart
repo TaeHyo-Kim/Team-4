@@ -90,9 +90,6 @@ class WalkViewModel with ChangeNotifier {
     }
   }
 
-  // [수정] 인디케이터 원형 개수 처리
-  int get totalDots => reviewImages.isEmpty ? 3 : reviewImages.length;
-
   // [수정] 진입 시 위치 권한 체크 (항상 허용이 아닐 경우 팝업) [새 요구사항]
   Future<void> checkLocationPermission() async {
     LocationPermission permission = await Geolocator.checkPermission();
@@ -418,10 +415,28 @@ class WalkViewModel with ChangeNotifier {
     final picker = ImagePicker();
     final List<XFile> images = await picker.pickMultiImage();
     if (images.isNotEmpty) {
-      reviewImages = images.take(3).toList();
+      // 기존 리스트에 추가 (누적식)
+      reviewImages.addAll(images);
       notifyListeners();
     }
   }
+
+  // [추가] 특정 인덱스의 이미지를 삭제하는 기능 [요구사항 7]
+  void removeImage(int index) {
+    if (index >= 0 && index < reviewImages.length) {
+      reviewImages.removeAt(index);
+      // 삭제 후 인덱스 범위 초과 방지
+      if (currentImageIndex >= reviewImages.length && reviewImages.isNotEmpty) {
+        currentImageIndex = reviewImages.length - 1;
+      } else if (reviewImages.isEmpty) {
+        currentImageIndex = 0;
+      }
+      notifyListeners();
+    }
+  }
+
+// [수정] 인디케이터 개수 로직: 이미지 개수에 맞춰 유동적으로 변화 [요구사항 1, 2]
+  int get totalDots => reviewImages.isEmpty ? 1 : reviewImages.length;
 
   // 최종 저장 (이미지 스토리지 업로드 포함)
   Future<void> uploadAndSaveRecord(String memo) async {
