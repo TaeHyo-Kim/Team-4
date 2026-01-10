@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+//원복
 // 유저 통계
 class UserStats {
   final double totalWalkDistance;

@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../data/repositories.dart';
 import 'models.dart';
 
+//원복
 class AuthViewModel with ChangeNotifier {
   final AuthRepository _repo = AuthRepository();
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -23,7 +24,7 @@ class AuthViewModel with ChangeNotifier {
   AuthViewModel() {
     _auth.authStateChanges().listen((firebaseUser) {
       _user = firebaseUser;
-      
+
       _userSub?.cancel();
 
       if (firebaseUser != null) {
@@ -180,10 +181,10 @@ class AuthViewModel with ChangeNotifier {
     try {
       // 1. Firestore 유저 데이터 삭제
       await FirebaseFirestore.instance.collection('users').doc(user.uid).delete();
-      
+
       // 2. Firebase Auth 계정 삭제
       await user.delete();
-      
+
       _userModel = null;
       _userSub?.cancel();
     } on FirebaseAuthException catch (e) {

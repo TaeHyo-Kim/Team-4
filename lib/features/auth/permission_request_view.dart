@@ -3,6 +3,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/permission_service.dart';
 import '../../core/notification_service.dart';
 
+//원복
 /// 권한 요청 화면 (회원가입 후 표시)
 class PermissionRequestView extends StatefulWidget {
   const PermissionRequestView({super.key});
@@ -154,7 +155,7 @@ class _PermissionRequestViewState extends State<PermissionRequestView> {
               style: TextStyle(color: Colors.grey[600], fontSize: 14),
             ),
             const SizedBox(height: 40),
-            
+
             // 알림 권한
             _buildPermissionCard(
               icon: Icons.notifications_outlined,
@@ -164,7 +165,7 @@ class _PermissionRequestViewState extends State<PermissionRequestView> {
               onTap: _requestNotificationPermission,
             ),
             const SizedBox(height: 16),
-            
+
             // 위치 권한
             _buildPermissionCard(
               icon: Icons.location_on_outlined,
@@ -174,7 +175,7 @@ class _PermissionRequestViewState extends State<PermissionRequestView> {
               onTap: _requestLocationPermission,
             ),
             const SizedBox(height: 16),
-            
+
             // 이미지 권한
             _buildPermissionCard(
               icon: Icons.image_outlined,
@@ -183,7 +184,7 @@ class _PermissionRequestViewState extends State<PermissionRequestView> {
               isGranted: _photosGranted,
               onTap: _requestPhotosPermission,
             ),
-            
+
             const SizedBox(height: 40),
             SizedBox(
               width: double.infinity,
@@ -200,9 +201,9 @@ class _PermissionRequestViewState extends State<PermissionRequestView> {
                 child: _isLoading
                     ? const CircularProgressIndicator(color: Colors.white)
                     : const Text(
-                        "다음",
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
+                  "다음",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
               ),
             ),
             const SizedBox(height: 16),
