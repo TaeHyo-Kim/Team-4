@@ -18,7 +18,7 @@ class ProfileViewModel with ChangeNotifier {
 
   List<UserModel> _followingUsers = [];
   List<UserModel> _followerUsers = [];
-  
+
   List<UserModel> get followingUsers => _followingUsers;
   List<UserModel> get followerUsers => _followerUsers;
 
@@ -81,7 +81,7 @@ class ProfileViewModel with ChangeNotifier {
 
       // 3. DB 반영
       await _db.collection('users').doc(uid).update(updates);
-      
+
     } catch (e) {
       debugPrint("프로필 업데이트 실패: $e");
       rethrow;

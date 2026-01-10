@@ -8,6 +8,8 @@ import '../pet/views.dart';
 import '../../data/repositories.dart';
 import '../walk/models.dart';
 import '../profile/viewmodels.dart';
+import '../social/views.dart';
+import '../social/viewmodels.dart';
 
 // -----------------------------------------------------------------------------
 // 1. 로그인 화면 (LoginScreen)
@@ -291,211 +293,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
 }
 
 // -----------------------------------------------------------------------------
-// 4. 내 정보 화면 (ProfileScreen)
-// -----------------------------------------------------------------------------
-class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
-
-  @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
-}
-
-class _ProfileScreenState extends State<ProfileScreen> {
-  List<WalkRecordModel> _walkRecords = [];
-  bool _isLoadingWalks = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadWalkRecords();
-  }
-
-  Future<void> _loadWalkRecords() async {
-    final authVM = context.read<AuthViewModel>();
-    final user = authVM.userModel;
-    if (user == null) return;
-
-    setState(() => _isLoadingWalks = true);
-    try {
-      final walkRepo = WalkRepository();
-      final walks = await walkRepo.getMyWalks(user.uid);
-      setState(() {
-        _walkRecords = walks;
-        _isLoadingWalks = false;
-      });
-    } catch (e) {
-      debugPrint("산책 기록 로드 실패: $e");
-      setState(() => _isLoadingWalks = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final authVM = context.watch<AuthViewModel>();
-    final user = authVM.userModel;
-
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF4CAF50),
-        title: const Text("프로필", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings, color: Colors.white),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 40,
-                    backgroundColor: Colors.grey[300],
-                    backgroundImage: (user?.profileImageUrl != null && user!.profileImageUrl!.isNotEmpty)
-                        ? NetworkImage(user.profileImageUrl!) : null,
-                    child: (user?.profileImageUrl == null || user!.profileImageUrl!.isEmpty)
-                        ? const Icon(Icons.pets, size: 40, color: Colors.white) : null,
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(user?.nickname ?? "익명 유저", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 4),
-                        Text(user?.bio ?? "좋은하루 되세요", style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-                        const SizedBox(height: 8),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Row(
-                            children: [
-                              Text("게시물 ${_walkRecords.length}", style: TextStyle(color: Colors.grey[700], fontSize: 13)),
-                              const SizedBox(width: 12),
-                              Text("팔로우 ${user?.stats.followingCount ?? 0}", style: TextStyle(color: Colors.grey[700], fontSize: 13)),
-                              const SizedBox(width: 12),
-                              Text("팔로워 ${user?.stats.followerCount ?? 0}", style: TextStyle(color: Colors.grey[700], fontSize: 13)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  ElevatedButton(
-                    onPressed: () => _showEditProfileDialog(context, authVM, user),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2196F3),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child: const Text("프로필 편집"),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(),
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: _isLoadingWalks
-                  ? const Center(child: CircularProgressIndicator())
-                  : _walkRecords.isEmpty
-                      ? const Center(child: Padding(padding: EdgeInsets.all(40.0), child: Text("아직 산책 기록이 없습니다.", style: TextStyle(color: Colors.grey, fontSize: 14))))
-                      : GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 4, mainAxisSpacing: 4),
-                          itemCount: _walkRecords.length,
-                          itemBuilder: (context, index) {
-                            final walk = _walkRecords[index];
-                            final photoUrl = walk.photoUrls.isNotEmpty ? walk.photoUrls[0] : null;
-                            return GestureDetector(
-                              onTap: () => _showWalkDetail(context, walk),
-                              child: Container(
-                                decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4)),
-                                child: photoUrl != null && photoUrl.isNotEmpty
-                                    ? ClipRRect(borderRadius: BorderRadius.circular(4), child: Image.network(photoUrl, fit: BoxFit.cover))
-                                    : const Icon(Icons.directions_walk, size: 40, color: Colors.grey),
-                              ),
-                            );
-                          },
-                        ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showEditProfileDialog(BuildContext context, AuthViewModel authVM, dynamic user) {
-    final nicknameCtrl = TextEditingController(text: user?.nickname ?? '');
-    final bioCtrl = TextEditingController(text: user?.bio ?? '');
-    File? selectedImage;
-    final picker = ImagePicker();
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text("프로필 수정"),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                GestureDetector(
-                  onTap: () async {
-                    final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery);
-                    if (pickedFile != null) setDialogState(() => selectedImage = File(pickedFile.path));
-                  },
-                  child: CircleAvatar(
-                    radius: 40,
-                    backgroundColor: Colors.grey[200],
-                    backgroundImage: selectedImage != null ? FileImage(selectedImage!) : null,
-                    child: selectedImage == null ? const Icon(Icons.camera_alt, color: Colors.grey) : null,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                TextField(controller: nicknameCtrl, decoration: const InputDecoration(labelText: "닉네임", border: OutlineInputBorder())),
-                const SizedBox(height: 16),
-                TextField(controller: bioCtrl, decoration: const InputDecoration(labelText: "한줄소개", border: OutlineInputBorder()), maxLines: 2),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("취소")),
-            ElevatedButton(
-              onPressed: () async {
-                final profileVM = context.read<ProfileViewModel>();
-                await profileVM.updateProfile(nickname: nicknameCtrl.text.trim(), bio: bioCtrl.text.trim(), imageFile: selectedImage);
-                await authVM.fetchUserProfile();
-                if (context.mounted) Navigator.pop(ctx);
-              },
-              child: const Text("수정 완료"),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showWalkDetail(BuildContext context, WalkRecordModel walk) {
-    final startDate = walk.startTime.toDate();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text("산책 기록 - ${startDate.year}.${startDate.month}.${startDate.day}"),
-        content: Text("거리: ${walk.distance.toStringAsFixed(2)} km\n시간: ${(walk.duration ~/ 60)}분\n후기: ${walk.memo}"),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("닫기"))],
-      ),
-    );
-  }
-}
-
-// -----------------------------------------------------------------------------
 // 5. 설정 화면 (SettingsScreen)
 // -----------------------------------------------------------------------------
 class SettingsScreen extends StatelessWidget {
@@ -623,7 +420,6 @@ class AccountManagementScreen extends StatelessWidget {
             const SizedBox(height: 30),
             const Text("계정 보안", style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
-            // 비밀번호 변경 버튼 - 설정 화면 메뉴 디자인과 동일하게 수정
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -777,7 +573,7 @@ class _PasswordChangeStep1ScreenState extends State<PasswordChangeStep1Screen> {
               Center(
                 child: TextButton(
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ForgotPasswordScreen())),
-                  child: const Text("비밀번호가 기억나지 않으세요?", style: TextStyle(color: Colors.grey, decoration: TextDecoration.underline)),
+                  child: const Text("비밀번호가 기억나지 않으세요?", style: TextStyle(color: Colors.grey)),
                 ),
               ),
               const SizedBox(height: 80),

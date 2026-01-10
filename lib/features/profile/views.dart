@@ -4,25 +4,41 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../auth/viewmodels.dart';
 import '../auth/views.dart'; 
-import '../pet/views.dart'; 
-import '../social/views.dart';
+import '../pet/viewmodels.dart';
 import '../social/viewmodels.dart';
+import '../social/views.dart';
 import 'viewmodels.dart';
 
 // [A] 프로필 조회 화면 (디자인 복구 및 레이아웃 최적화)
-class ProfileView extends StatelessWidget {
+class ProfileView extends StatefulWidget {
   const ProfileView({super.key});
+
+  @override
+  State<ProfileView> createState() => _ProfileViewState();
+}
+
+class _ProfileViewState extends State<ProfileView> {
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      context.read<ProfileViewModel>().fetchMyWalkRecords();
+      context.read<PetViewModel>().fetchMyPets();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final authVM = context.watch<AuthViewModel>();
+    final profileVM = context.watch<ProfileViewModel>();
+    final petVM = context.watch<PetViewModel>();
     final user = authVM.userModel;
 
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text("프로필", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF4CAF50),
+        backgroundColor: const Color(0xFF4CAF50), 
         elevation: 0,
         actions: [
           IconButton(
@@ -33,23 +49,21 @@ class ProfileView extends StatelessWidget {
       ),
       body: Column(
         children: [
-          // 1. [고정] 프로필 상단 정보 (이미지, 이름, 소개, 팔로워/팔로잉 + 우측 편집 버튼)
+          // 1. [고정] 프로필 상단 정보
           Padding(
-            padding: const EdgeInsets.fromLTRB(15, 30, 10, 20), // 오버플로우 방지를 위한 여백 최적화
+            padding: const EdgeInsets.fromLTRB(15, 35, 10, 25),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 CircleAvatar(
-                  radius: 42, 
+                  radius: 40, 
                   backgroundColor: Colors.grey[200],
                   backgroundImage: (user?.profileImageUrl != null && user!.profileImageUrl!.isNotEmpty)
-                      ? NetworkImage(user.profileImageUrl!)
-                      : null,
+                      ? NetworkImage(user.profileImageUrl!) : null,
                   child: (user?.profileImageUrl == null || user!.profileImageUrl!.isEmpty)
-                      ? const Icon(Icons.person, size: 42, color: Colors.white)
-                      : null,
+                      ? const Icon(Icons.person, size: 40, color: Colors.white) : null,
                 ),
-                const SizedBox(width: 12), 
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -63,17 +77,17 @@ class ProfileView extends StatelessWidget {
                         style: const TextStyle(color: Colors.grey, fontSize: 13),
                         maxLines: 1, overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 8),
-                      // 통계 정보 위젯 (공통 컴포넌트 사용)
+                      // 통계 정보 행 (FollowListScreen 연결됨)
                       UserStatsRow(
-                        userId: user?.uid ?? '',
-                        postCount: user?.stats.postCount ?? 0,
+                        userId: user?.uid ?? "",
+                        postCount: profileVM.walkRecords.length,
                         followingCount: user?.stats.followingCount ?? 0,
                         followerCount: user?.stats.followerCount ?? 0,
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 5), 
+                const SizedBox(width: 5),
                 ElevatedButton(
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileEditView())),
                   style: ElevatedButton.styleFrom(
@@ -90,29 +104,79 @@ class ProfileView extends StatelessWidget {
           ),
           const Divider(thickness: 1, color: Colors.black12, height: 1),
 
-          // 2. [스크롤] 반려동물 목록 및 피드
+          // 2. [스크롤 영역]
           Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 10),
-                  child: PetScreen(),
+            child: profileVM.isLoading 
+              ? const Center(child: CircularProgressIndicator()) 
+              : ListView(
+                  padding: EdgeInsets.zero,
+                  children: [
+                    // 반려동물 요약 목록 (가로 스크롤 형태)
+                    if (petVM.pets.isNotEmpty)
+                      Container(
+                        height: 100,
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          itemCount: petVM.pets.length,
+                          itemBuilder: (context, index) {
+                            final pet = petVM.pets[index];
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 15),
+                              child: Column(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 25,
+                                    backgroundImage: pet.imageUrl.isNotEmpty ? NetworkImage(pet.imageUrl) : null,
+                                    child: pet.imageUrl.isEmpty ? const Icon(Icons.pets, size: 15) : null,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(pet.name, style: const TextStyle(fontSize: 11)),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    
+                    const Divider(thickness: 1, color: Colors.black12),
+
+                    // 산책 기록 영역
+                    if (profileVM.walkRecords.isEmpty)
+                      Container(
+                        height: 300, 
+                        alignment: Alignment.center,
+                        child: const Text(
+                          "아직 산책 기록이 없습니다.",
+                          style: TextStyle(color: Colors.black38, fontSize: 16, fontWeight: FontWeight.w500),
+                        ),
+                      )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: profileVM.walkRecords.length,
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3, crossAxisSpacing: 4, mainAxisSpacing: 4,
+                          ),
+                          itemBuilder: (context, index) {
+                            final walk = profileVM.walkRecords[index];
+                            final photoUrl = walk.photoUrls.isNotEmpty ? walk.photoUrls[0] : null;
+                            return Container(
+                              decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4)),
+                              child: photoUrl != null 
+                                ? ClipRRect(borderRadius: BorderRadius.circular(4), child: Image.network(photoUrl, fit: BoxFit.cover))
+                                : const Icon(Icons.directions_walk, color: Colors.grey),
+                            );
+                          },
+                        ),
+                      ),
+                    const SizedBox(height: 40),
+                  ],
                 ),
-                const SizedBox(height: 80),
-                const Center(
-                  child: Text(
-                    "아직 산책 기록이 없습니다.",
-                    style: TextStyle(
-                      color: Colors.black38,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 40),
-              ],
-            ),
           ),
         ],
       ),
@@ -154,7 +218,7 @@ class _ProfileEditViewState extends State<ProfileEditView> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("프로필 수정", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text("프로필 수정", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), 
         backgroundColor: const Color(0xFF4CAF50),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
@@ -231,6 +295,7 @@ class UserStatsRow extends StatelessWidget {
   final int followerCount;
 
   const UserStatsRow({
+    super.key,
     required this.userId,
     required this.postCount,
     required this.followingCount,
@@ -322,10 +387,10 @@ class _FollowListScreenState extends State<FollowListScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final profileVM = context.read<ProfileViewModel>();
       final socialVM = context.read<SocialViewModel>();
-      
+
       // SocialViewModel의 팔로우 상태도 업데이트
       socialVM.fetchUsers();
-      
+
       if (widget.isFollowingList) {
         profileVM.fetchFollowingUsers(widget.userId);
       } else {
@@ -340,9 +405,9 @@ class _FollowListScreenState extends State<FollowListScreen> {
     final authVM = context.watch<AuthViewModel>();
     final socialVM = context.watch<SocialViewModel>();
     final myUid = authVM.userModel?.uid;
-    
-    final users = widget.isFollowingList 
-        ? profileVM.followingUsers 
+
+    final users = widget.isFollowingList
+        ? profileVM.followingUsers
         : profileVM.followerUsers;
 
     return Scaffold(
@@ -359,136 +424,136 @@ class _FollowListScreenState extends State<FollowListScreen> {
       body: profileVM.isLoading
           ? const Center(child: CircularProgressIndicator())
           : users.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        widget.isFollowingList ? Icons.person_outline : Icons.people_outline,
-                        size: 64,
-                        color: Colors.grey[400],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        widget.isFollowingList 
-                            ? "팔로잉한 사용자가 없습니다." 
-                            : "팔로워가 없습니다.",
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  itemCount: users.length,
-                  itemBuilder: (context, index) {
-                    final user = users[index];
-                    final isMe = user.uid == myUid;
-                    
-                    return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 8,
-                      ),
-                      leading: CircleAvatar(
-                        radius: 28,
-                        backgroundColor: Colors.grey[300],
-                        backgroundImage: user.profileImageUrl != null && 
-                                user.profileImageUrl!.isNotEmpty
-                            ? NetworkImage(user.profileImageUrl!)
-                            : null,
-                        child: (user.profileImageUrl == null || 
-                                user.profileImageUrl!.isEmpty)
-                            ? const Icon(Icons.person, color: Colors.white)
-                            : null,
-                      ),
-                      title: Text(
-                        user.nickname,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      subtitle: Text(
-                        user.bio ?? "",
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
-                      trailing: isMe
-                          ? Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.grey[200],
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: const Text(
-                                "나",
-                                style: TextStyle(
-                                  color: Colors.black87,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            )
-                          : ElevatedButton(
-                              onPressed: () async {
-                                try {
-                                  await socialVM.toggleFollow(user.uid);
-                                  // 팔로우 상태 변경 후 목록 새로고침
-                                  final profileVM = context.read<ProfileViewModel>();
-                                  if (widget.isFollowingList) {
-                                    await profileVM.fetchFollowingUsers(widget.userId);
-                                  } else {
-                                    await profileVM.fetchFollowerUsers(widget.userId);
-                                  }
-                                } catch (e) {
-                                  if (!mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text("작업에 실패했습니다."),
-                                    ),
-                                  );
-                                }
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: socialVM.isFollowing(user.uid)
-                                    ? Colors.grey[200]
-                                    : Colors.amber,
-                                foregroundColor: socialVM.isFollowing(user.uid)
-                                    ? Colors.black87
-                                    : Colors.white,
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                              ),
-                              child: Text(
-                                socialVM.isFollowing(user.uid) ? "팔로잉" : "팔로우",
-                                style: const TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                      onTap: isMe
-                          ? null
-                          : () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => OtherUserProfileView(user: user),
-                                ),
-                              );
-                            },
-                    );
-                  },
+          ? Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              widget.isFollowingList ? Icons.person_outline : Icons.people_outline,
+              size: 64,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              widget.isFollowingList
+                  ? "팔로잉한 사용자가 없습니다."
+                  : "팔로워가 없습니다.",
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
+      )
+          : ListView.builder(
+        itemCount: users.length,
+        itemBuilder: (context, index) {
+          final user = users[index];
+          final isMe = user.uid == myUid;
+
+          return ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 8,
+            ),
+            leading: CircleAvatar(
+              radius: 28,
+              backgroundColor: Colors.grey[300],
+              backgroundImage: user.profileImageUrl != null &&
+                  user.profileImageUrl!.isNotEmpty
+                  ? NetworkImage(user.profileImageUrl!)
+                  : null,
+              child: (user.profileImageUrl == null ||
+                  user.profileImageUrl!.isEmpty)
+                  ? const Icon(Icons.person, color: Colors.white)
+                  : null,
+            ),
+            title: Text(
+              user.nickname,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            subtitle: Text(
+              user.bio ?? "",
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            trailing: isMe
+                ? Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 6,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                "나",
+                style: TextStyle(
+                  color: Colors.black87,
+                  fontWeight: FontWeight.bold,
                 ),
+              ),
+            )
+                : ElevatedButton(
+              onPressed: () async {
+                try {
+                  await socialVM.toggleFollow(user.uid);
+                  // 팔로우 상태 변경 후 목록 새로고침
+                  final profileVM = context.read<ProfileViewModel>();
+                  if (widget.isFollowingList) {
+                    await profileVM.fetchFollowingUsers(widget.userId);
+                  } else {
+                    await profileVM.fetchFollowerUsers(widget.userId);
+                  }
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("작업에 실패했습니다."),
+                    ),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: socialVM.isFollowing(user.uid)
+                    ? Colors.grey[200]
+                    : Colors.amber,
+                foregroundColor: socialVM.isFollowing(user.uid)
+                    ? Colors.black87
+                    : Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+              ),
+              child: Text(
+                socialVM.isFollowing(user.uid) ? "팔로잉" : "팔로우",
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            onTap: isMe
+                ? null
+                : () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => OtherUserProfileView(user: user),
+                ),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }
