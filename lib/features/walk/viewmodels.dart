@@ -14,6 +14,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 
 
 class WalkViewModel with ChangeNotifier {
@@ -54,13 +55,26 @@ class WalkViewModel with ChangeNotifier {
   // 배율 변경: 1:12,500은 줌 레벨 약 16.5 ~ 17.0
   final double _defaultZoom = 16.5;
 
+  // [추가] 후기 텍스트 유지 및 시간 관리를 위한 변수
+  final TextEditingController reviewController = TextEditingController();
+  DateTime? endTime; // 요약 화면 표기용
+
+  DateTime? get startTime => _startTime; // [해결] View에서 접근 가능한 게터 추가
+
 // [추가] 초기 데이터 로드 통합 함수
   Future<void> initWalkScreen() async {
     await checkLocationPermission();
     await fetchMyPets();
     await fetchRecentWalk();
     await fetchCurrentLocation();
+
+    // 위치 서비스가 활성화된 경우에만 트래킹 시작
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (serviceEnabled) {
+      _startLocationTracking();
+    }
   }
+
 
   // [수정] 펫 선택 시 ViewModel에서 상태 관리
   void selectPet(Map<String, dynamic>? pet) {
@@ -144,6 +158,16 @@ class WalkViewModel with ChangeNotifier {
     }
   }
 
+  // [수정] 산책 종료 시 시간 기록 및 상태 변경
+  void finishWalk() {
+    endTime = DateTime.now();
+    _isWalking = false; // 산책 버튼 잠김 해제의 핵심
+    _timer?.cancel();
+    _positionStream?.cancel();
+    walkState = 2; // 요약 화면으로 이동
+    notifyListeners();
+  }
+
   // [수정] 최종 저장 로직: emoji와 photoUrls를 명확히 매핑
   Future<void> stopWalkAndSave(String memo) async {
     final userId = _auth.currentUser?.uid;
@@ -169,8 +193,16 @@ class WalkViewModel with ChangeNotifier {
     try {
       await FirebaseFirestore.instance.collection('walks').add(record); // 컬렉션 명 'walks' 확인
       await WalkDbHelper.instance.clearCache();
-      walkState = 0; // 홈으로 복귀
-      reviewImages = []; // 이미지 리스트 초기화
+      walkState = 0;
+      _isWalking = false;
+      _isPaused = false;
+      _seconds = 0;
+      _distance = 0.0;
+      _route = [];
+      reviewImages = [];
+      reviewController.clear(); // 텍스트 필드 비우기
+
+      await fetchRecentWalk(); // 저장 후 즉시 최신 기록 불러오기 [요구사항 1]
       notifyListeners();
     } catch (e) {
       debugPrint("저장 에러: $e");
@@ -293,9 +325,10 @@ class WalkViewModel with ChangeNotifier {
   }
 
   void _startLocationTracking() {
+    _positionStream?.cancel(); // 기존 스트림이 있다면 종료하여 중복 방지
     const locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: 5,
+      distanceFilter: 2,
     );
 
     _positionStream = Geolocator.getPositionStream(locationSettings: locationSettings)
