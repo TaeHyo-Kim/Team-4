@@ -6,6 +6,7 @@ import 'dart:io';
 import 'viewmodels.dart';
 // widgets.dart import 제거함 (파일 내부에 포함)
 import 'package:intl/intl.dart'; // [해결] DateFormat 사용을 위해 필수
+import 'package:cloud_firestore/cloud_firestore.dart'; // Timestamp 사용을 위해 추가
 
 class WalkScreen extends StatefulWidget {
   const WalkScreen({super.key});
@@ -65,9 +66,18 @@ class _WalkScreenState extends State<WalkScreen> {
       children: [
         Opacity(opacity: 0.3, child: _buildGoogleMap(vm, interaction: false)),
         Positioned.fill(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
+          child: RefreshIndicator(
+            onRefresh: () async {
+              // Pull-to-refresh: 최근 산책 기록 다시 가져오기
+              await vm.fetchRecentWalk();
+              await vm.fetchMyPets();
+            },
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(), // 항상 스크롤 가능하도록 설정
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(height: 20), // 상단 여백 추가
               const Text("오늘도 즐거운 산책 해보아용 >.<",
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 20),
@@ -210,16 +220,106 @@ class _WalkScreenState extends State<WalkScreen> {
               // [수정] 최근 산책 기록 복구 [요구사항 2]
               // [수정] 최근 산책 기록 표시 및 없을 경우 대사 표기 [요구사항 3]
               Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: vm.recentWalk != null
-                    ? Column( /* 최근 기록 표시 */ )
+                    ? _buildRecentWalkCard(vm)
                     : const Center(
-                  child: Text("아직 산책 기록이 없어요.\n첫 산책을 시작해보세요!",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey)),
+                        child: Text("아직 산책 기록이 없어요.\n첫 산책을 시작해보세요!",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey)),
+                      ),
+              ),
+              const SizedBox(height: 40), // 하단 여백 추가
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 최근 산책 기록 카드 위젯
+  Widget _buildRecentWalkCard(WalkViewModel vm) {
+    if (vm.recentWalk == null) return const SizedBox.shrink();
+    
+    final walkData = vm.recentWalk!;
+    final endTime = walkData['endTime'] as Timestamp?;
+    final distance = walkData['distance'] as double? ?? 0.0;
+    final duration = walkData['duration'] as int? ?? 0;
+    final emoji = walkData['emoji'] as String? ?? '🐕';
+    
+    String dateStr = '';
+    if (endTime != null) {
+      dateStr = DateFormat('yyyy년 MM월 dd일').format(endTime.toDate());
+    }
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "최근 산책",
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
                 ),
-              )
-              //
+              ),
+              Text(emoji, style: const TextStyle(fontSize: 24)),
             ],
+          ),
+          if (dateStr.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              dateStr,
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildStatItem("거리", "${distance.toStringAsFixed(1)}km"),
+              _buildStatItem("시간", "${duration ~/ 60}분 ${duration % 60}초"),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF4CAF50),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[600],
           ),
         ),
       ],

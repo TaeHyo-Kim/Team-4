@@ -47,6 +47,8 @@ class WalkViewModel with ChangeNotifier {
   Map<String, dynamic>? selectedPet; // 단일 선택 (기존 호환성 유지)
   Map<String, dynamic>? recentWalk;
   Set<String> selectedPetIds = {}; // 여러 반려동물 선택용
+  StreamSubscription<QuerySnapshot>? _recentWalkSubscription; // 최근 산책 기록 실시간 스트림
+  StreamSubscription<QuerySnapshot>? _petsSubscription; // 반려동물 목록 실시간 스트림
 
   // 후기 작성 관련 필드
   List<XFile> reviewImages = [];
@@ -463,6 +465,8 @@ class WalkViewModel with ChangeNotifier {
     _inactivityTimer?.cancel();
     _positionStream?.cancel();
     _timer?.cancel();
+    _recentWalkSubscription?.cancel();
+    _petsSubscription?.cancel();
     reviewController.dispose();
     super.dispose();
   }
@@ -481,9 +485,13 @@ class WalkViewModel with ChangeNotifier {
   // [추가] 초기 데이터 로드 통합 함수
   Future<void> initWalkScreen() async {
     await checkLocationPermission();
-    await fetchMyPets();
-    await fetchRecentWalk();
     await fetchCurrentLocation();
+
+    // 반려동물 목록 실시간 스트림 설정
+    setupPetsStream();
+
+    // 최근 산책 기록 실시간 스트림 설정
+    setupRecentWalkStream();
 
     // 위치 추적은 산책이 시작될 때만 시작하도록 변경
     // (initWalkScreen에서는 위치 추적을 시작하지 않음)
@@ -497,23 +505,32 @@ class WalkViewModel with ChangeNotifier {
     }
   }
 
-  // 내 반려동물 목록 가져오기 (isPrimary 기준 정렬)
+  // 내 반려동물 목록 가져오기 (isPrimary 기준 정렬) - 단발성
   Future<void> fetchMyPets() async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
 
-    final snapshot = await FirebaseFirestore.instance
-        .collection('pets')
-        .where('ownerId', isEqualTo: uid)
-        .get();
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('pets')
+          .where('ownerId', isEqualTo: uid)
+          .get();
 
-    // 문서 ID도 함께 저장
-    myPets = snapshot.docs.map((doc) {
-      final data = doc.data();
-      data['id'] = doc.id; // 문서 ID 추가
-      return data;
-    }).toList();
+      // 문서 ID도 함께 저장
+      myPets = snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id; // 문서 ID 추가
+        return data;
+      }).toList();
 
+      _updatePetsList();
+    } catch (e) {
+      debugPrint("반려동물 목록 로드 실패: $e");
+    }
+  }
+
+  // 반려동물 목록 업데이트 및 정렬
+  void _updatePetsList() {
     // isPrimary가 true인 동물을 우선 정렬
     myPets.sort((a, b) {
       final aPrimary = a['isPrimary'] == true ? 1 : 0;
@@ -525,29 +542,177 @@ class WalkViewModel with ChangeNotifier {
       // 대표 반려동물을 기본값으로 설정
       selectedPet = myPets.firstWhere((p) => p['isPrimary'] == true, orElse: () => myPets.first);
       
-      // 대표 반려동물을 자동으로 선택된 상태로 설정
-      final primaryPetId = selectedPet?['id'] as String?;
-      if (primaryPetId != null) {
-        selectedPetIds = {primaryPetId};
+      // 대표 반려동물이 선택되지 않은 경우에만 자동으로 선택된 상태로 설정
+      if (selectedPetIds.isEmpty) {
+        final primaryPetId = selectedPet?['id'] as String?;
+        if (primaryPetId != null) {
+          selectedPetIds = {primaryPetId};
+        }
+      } else {
+        // 선택된 반려동물이 삭제되었는지 확인하고, 삭제되었으면 대표 반려동물로 변경
+        final existingSelectedIds = selectedPetIds.where((id) {
+          return myPets.any((pet) => pet['id'] == id);
+        }).toSet();
+        
+        if (existingSelectedIds.isEmpty && myPets.isNotEmpty) {
+          final primaryPetId = selectedPet?['id'] as String?;
+          if (primaryPetId != null) {
+            selectedPetIds = {primaryPetId};
+          }
+        } else {
+          selectedPetIds = existingSelectedIds;
+        }
       }
+    } else {
+      // 반려동물이 없으면 선택도 초기화
+      selectedPet = null;
+      selectedPetIds = {};
     }
     notifyListeners();
   }
 
-  // [추가] 최근 산책 기록 로드 (userId 기준 최신 1건)
+  // 반려동물 목록 실시간 스트림 설정
+  void setupPetsStream() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    // 기존 스트림이 있으면 취소
+    _petsSubscription?.cancel();
+
+    debugPrint('반려동물 목록 실시간 스트림 설정: $uid');
+
+    // 실시간 스트림 설정
+    _petsSubscription = FirebaseFirestore.instance
+        .collection('pets')
+        .where('ownerId', isEqualTo: uid)
+        .snapshots()
+        .listen(
+      (snapshot) {
+        debugPrint('반려동물 목록 업데이트: ${snapshot.docs.length}개');
+        
+        // 문서 ID도 함께 저장
+        myPets = snapshot.docs.map((doc) {
+          final data = doc.data();
+          data['id'] = doc.id; // 문서 ID 추가
+          return data;
+        }).toList();
+
+        _updatePetsList();
+      },
+      onError: (error) {
+        debugPrint('반려동물 목록 스트림 오류: $error');
+      },
+    );
+  }
+
+  // [추가] 최근 산책 기록 로드 (userId 기준 최신 1건) - 단발성
   Future<void> fetchRecentWalk() async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
-    final snapshot = await FirebaseFirestore.instance
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('walks')
+          .where('userId', isEqualTo: uid)
+          .orderBy('endTime', descending: true)
+          .limit(1)
+          .get();
+      if (snapshot.docs.isNotEmpty) {
+        recentWalk = snapshot.docs.first.data();
+      } else {
+        recentWalk = null;
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint("최근 산책 기록 로드 실패: $e");
+      // 인덱스 오류일 수 있으므로 orderBy 없이 재시도
+      try {
+        final snapshot = await FirebaseFirestore.instance
+            .collection('walks')
+            .where('userId', isEqualTo: uid)
+            .limit(1)
+            .get();
+        if (snapshot.docs.isNotEmpty) {
+          // endTime 기준으로 정렬
+          final sorted = snapshot.docs.toList();
+          sorted.sort((a, b) {
+            final aEndTime = (a.data()['endTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+            final bEndTime = (b.data()['endTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+            return bEndTime.compareTo(aEndTime);
+          });
+          recentWalk = sorted.first.data();
+        } else {
+          recentWalk = null;
+        }
+        notifyListeners();
+      } catch (e2) {
+        debugPrint("최근 산책 기록 재시도 실패: $e2");
+      }
+    }
+  }
+
+  // [추가] 최근 산책 기록 실시간 스트림 설정
+  void setupRecentWalkStream() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    // 기존 스트림이 있으면 취소
+    _recentWalkSubscription?.cancel();
+
+    // 실시간 스트림 설정
+    _recentWalkSubscription = FirebaseFirestore.instance
         .collection('walks')
         .where('userId', isEqualTo: uid)
         .orderBy('endTime', descending: true)
         .limit(1)
-        .get();
-    if (snapshot.docs.isNotEmpty) {
-      recentWalk = snapshot.docs.first.data();
-      notifyListeners();
-    }
+        .snapshots()
+        .listen(
+      (snapshot) {
+        if (snapshot.docs.isNotEmpty) {
+          recentWalk = snapshot.docs.first.data();
+        } else {
+          recentWalk = null;
+        }
+        notifyListeners();
+      },
+      onError: (error) {
+        debugPrint('최근 산책 기록 스트림 오류: $error');
+        // 인덱스 오류일 수 있으므로 orderBy 없이 재시도
+        _setupRecentWalkStreamWithoutOrderBy();
+      },
+    );
+  }
+
+  // orderBy 없이 스트림 설정 (인덱스 오류 대비)
+  void _setupRecentWalkStreamWithoutOrderBy() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    _recentWalkSubscription?.cancel();
+
+    _recentWalkSubscription = FirebaseFirestore.instance
+        .collection('walks')
+        .where('userId', isEqualTo: uid)
+        .snapshots()
+        .listen(
+      (snapshot) {
+        if (snapshot.docs.isNotEmpty) {
+          // endTime 기준으로 정렬
+          final sorted = snapshot.docs.toList();
+          sorted.sort((a, b) {
+            final aEndTime = (a.data()['endTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+            final bEndTime = (b.data()['endTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+            return bEndTime.compareTo(aEndTime);
+          });
+          recentWalk = sorted.first.data();
+        } else {
+          recentWalk = null;
+        }
+        notifyListeners();
+      },
+      onError: (error) {
+        debugPrint('최근 산책 기록 스트림 재시도 오류: $error');
+      },
+    );
   }
 
   // 반려동물 선택/해제 토글
