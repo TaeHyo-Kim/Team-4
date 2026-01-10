@@ -133,6 +133,54 @@ class SocialRepository {
     return snapshot.docs.map((doc) => doc.id).toSet();
   }
 
+  // 팔로잉한 사용자 목록 조회 (UserModel 리스트)
+  Future<List<UserModel>> getFollowingUsers(String userId) async {
+    final followingSnapshot = await _db
+        .collection('users')
+        .doc(userId)
+        .collection('following')
+        .get();
+
+    if (followingSnapshot.docs.isEmpty) return [];
+
+    final userIds = followingSnapshot.docs.map((doc) => doc.id).toList();
+    
+    // 각 사용자 정보를 가져오기
+    final users = <UserModel>[];
+    for (final uid in userIds) {
+      final userDoc = await _db.collection('users').doc(uid).get();
+      if (userDoc.exists) {
+        users.add(UserModel.fromDocument(userDoc));
+      }
+    }
+
+    return users;
+  }
+
+  // 팔로워 목록 조회 (UserModel 리스트)
+  Future<List<UserModel>> getFollowerUsers(String userId) async {
+    final followersSnapshot = await _db
+        .collection('users')
+        .doc(userId)
+        .collection('followers')
+        .get();
+
+    if (followersSnapshot.docs.isEmpty) return [];
+
+    final userIds = followersSnapshot.docs.map((doc) => doc.id).toList();
+    
+    // 각 사용자 정보를 가져오기
+    final users = <UserModel>[];
+    for (final uid in userIds) {
+      final userDoc = await _db.collection('users').doc(uid).get();
+      if (userDoc.exists) {
+        users.add(UserModel.fromDocument(userDoc));
+      }
+    }
+
+    return users;
+  }
+
   // 팔로우 실행 (안정성 강화 버전)
   Future<void> followUser({required String myUid, required String targetUid}) async {
     final myRef = _db.collection('users').doc(myUid);
