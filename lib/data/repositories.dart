@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../core/notification_service.dart';
 
@@ -220,15 +221,20 @@ class SocialRepository {
       // 팔로우 알림 전송 (비동기로 처리, 실패해도 팔로우는 유지)
       if (myNickname != null) {
         try {
+          debugPrint('팔로우 알림 전송 시도: follower=$myUid, followed=$targetUid, nickname=$myNickname');
           await _notificationService.sendFollowNotification(
             followerId: myUid,
             followedUserId: targetUid,
             followerNickname: myNickname!,
           );
-        } catch (e) {
-          print("팔로우 알림 전송 실패: $e");
+          debugPrint('팔로우 알림 전송 완료');
+        } catch (e, stackTrace) {
+          debugPrint("팔로우 알림 전송 실패: $e");
+          debugPrint("스택 트레이스: $stackTrace");
           // 알림 전송 실패해도 팔로우는 성공으로 처리
         }
+      } else {
+        debugPrint('팔로우 알림 전송 실패: myNickname이 null입니다');
       }
     } catch (e) {
       print("Follow Transaction Error: $e");
