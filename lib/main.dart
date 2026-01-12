@@ -21,7 +21,7 @@ import 'features/statistics/viewmodels.dart';
 // 전역 NotificationService 인스턴스
 final notificationService = NotificationService();
 
-// 백그라운드 메시지 핸들러 (최상위 레벨 함수)
+// 백그라운드 메시지 핸들러
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   debugPrint('백그라운드 알림 처리: ${message.notification?.title}');
@@ -31,10 +31,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   
-  // Firebase Messaging 백그라운드 핸들러 등록
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-  
-  // 알림 서비스 초기화
   await notificationService.initialize();
   
   runApp(const MyApp());
@@ -58,17 +55,67 @@ class MyApp extends StatelessWidget {
         title: '댕댕워킹',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
-          primarySwatch: Colors.green,
-          scaffoldBackgroundColor: Colors.white,
           useMaterial3: true,
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF4CAF50),
+            primary: const Color(0xFF4CAF50),
+            secondary: const Color(0xFFFF9800),
+            surface: Colors.white,
+          ),
+          scaffoldBackgroundColor: const Color(0xFFFCFDF9),
           appBarTheme: const AppBarTheme(
-            backgroundColor: Colors.white,
-            foregroundColor: Colors.black,
+            backgroundColor: Color(0xFF4CAF50),
+            foregroundColor: Colors.white,
             elevation: 0,
-            centerTitle: false,
+            centerTitle: true,
+            titleTextStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          // 탭바(NavigationBar) 전역 테마 설정
+          navigationBarTheme: NavigationBarThemeData(
+            backgroundColor: Colors.white,
+            indicatorColor: const Color(0xFFE8F5E9),
+            labelTextStyle: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                return const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF4CAF50));
+              }
+              return const TextStyle(fontSize: 12, color: Colors.grey);
+            }),
+            iconTheme: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                return const IconThemeData(color: Color(0xFF4CAF50), size: 28);
+              }
+              return const IconThemeData(color: Colors.grey, size: 24);
+            }),
           ),
         ),
         home: const AuthGate(),
+      ),
+    );
+  }
+}
+
+// 이쁜 커스텀 로딩 위젯
+class PrettyLoadingIndicator extends StatelessWidget {
+  const PrettyLoadingIndicator({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(
+            width: 50, height: 50,
+            child: CircularProgressIndicator(
+              strokeWidth: 5,
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4CAF50)),
+              backgroundColor: Color(0xFFFFF9C4), // 연한 노란색 배경
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text("댕댕이와 산책 준비 중...", 
+            style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold)),
+        ],
       ),
     );
   }
@@ -83,7 +130,7 @@ class AuthGate extends StatelessWidget {
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const Scaffold(body: PrettyLoadingIndicator());
         }
         if (snapshot.hasData) {
           return const MainScreen();
@@ -104,20 +151,18 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   int _selectedIndex = 0;
 
-  // ProfileScreen(옛날버전) 대신 ProfileView(수정된 버전)를 사용
   final List<Widget> _screens = [
     const PetScreen(),   
     const StatisticsScreen(),
     const WalkScreen(),  
     const SocialScreen(),
-    const ProfileView(), // ProfileView로 교체
+    const ProfileView(),
   ];
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // 사용자가 로그인되어 있을 때 알림 리스너 설정
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _setupNotificationListener();
     });
@@ -129,17 +174,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // 앱이 포그라운드로 돌아와도 리스너는 재설정하지 않음
-    // NotificationService 내부에서 이미 중복 방지 로직이 있음
-  }
-
   void _setupNotificationListener() {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      notificationService.getFCMToken(); // FCM 토큰 갱신
-      notificationService.setupNotificationListener(); // 알림 리스너 설정
+      notificationService.getFCMToken();
+      notificationService.setupNotificationListener();
     }
   }
 
@@ -151,24 +190,55 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         children: _screens,
       ),
       bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFFFF9800), 
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
         ),
         child: NavigationBar(
+          height: 70,
+          elevation: 0,
           selectedIndex: _selectedIndex,
-          backgroundColor: Colors.transparent,
-          indicatorColor: Colors.white.withOpacity(0.2),
           onDestinationSelected: (index) {
             setState(() {
               _selectedIndex = index;
             });
+            if (index == 4) {
+              context.read<ProfileViewModel>().fetchMyWalkRecords();
+              context.read<PetViewModel>().fetchMyPets();
+              context.read<AuthViewModel>().fetchUserProfile();
+            }
           },
           destinations: const [
-            NavigationDestination(icon: Icon(Icons.home, color: Colors.white), label: '홈'),
-            NavigationDestination(icon: Icon(Icons.bar_chart, color: Colors.white), label: '통계'),
-            NavigationDestination(icon: Icon(Icons.directions_walk, color: Colors.white), label: '산책'),
-            NavigationDestination(icon: Icon(Icons.search, color: Colors.white), label: '검색'),
-            NavigationDestination(icon: Icon(Icons.person, color: Colors.white), label: '프로필'),
+            NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home),
+              label: '홈',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.bar_chart_outlined),
+              selectedIcon: Icon(Icons.bar_chart),
+              label: '통계',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.directions_walk_outlined),
+              selectedIcon: Icon(Icons.directions_walk),
+              label: '산책',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.search_outlined),
+              selectedIcon: Icon(Icons.search),
+              label: '검색',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person),
+              label: '프로필',
+            ),
           ],
         ),
       ),

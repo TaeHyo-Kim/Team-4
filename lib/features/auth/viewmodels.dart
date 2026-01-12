@@ -5,10 +5,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../data/repositories.dart';
 import 'models.dart';
 
-//원복
 class AuthViewModel with ChangeNotifier {
   final AuthRepository _repo = AuthRepository();
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   User? _user;
   UserModel? _userModel;
@@ -23,14 +23,17 @@ class AuthViewModel with ChangeNotifier {
 
   AuthViewModel() {
     _auth.authStateChanges().listen((firebaseUser) {
+      debugPrint("Auth 상태 변경: ${firebaseUser?.uid}");
       _user = firebaseUser;
-
+      
       _userSub?.cancel();
 
       if (firebaseUser != null) {
         _userSub = _repo.userStream(firebaseUser.uid).listen((updatedUser) {
           _userModel = updatedUser;
           notifyListeners();
+        }, onError: (e) {
+          debugPrint("유저 스트림 에러: $e");
         });
       } else {
         _userModel = null;
@@ -51,7 +54,7 @@ class AuthViewModel with ChangeNotifier {
       case 'invalid-email': return '유효하지 않은 이메일 형식입니다.';
       case 'user-not-found':
       case 'wrong-password':
-      case 'invalid-credential': return '이메일 또는 비밀번호가 틀렸습니다.';
+      case 'invalid-credential': return '비밀번호가 틀렸습니다.'; // '이메일 또는' 제거
       case 'too-many-requests': return '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.';
       case 'requires-recent-login': return '보안을 위해 다시 로그인한 후 시도해 주세요.';
       default: return '오류가 발생했습니다: ${e.message}';
@@ -59,10 +62,14 @@ class AuthViewModel with ChangeNotifier {
   }
 
   Future<void> fetchUserProfile() async {
-    if (_user == null) return;
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) return;
     try {
-      _userModel = await _repo.getUser(_user!.uid);
-      notifyListeners();
+      final model = await _repo.getUser(currentUser.uid);
+      if (model != null) {
+        _userModel = model;
+        notifyListeners();
+      }
     } catch (e) {
       debugPrint("프로필 로드 실패: $e");
     }
@@ -139,13 +146,12 @@ class AuthViewModel with ChangeNotifier {
   }
 
   Future<void> logout() async {
+    _userSub?.cancel();
     await _auth.signOut();
     _userModel = null;
-    _userSub?.cancel();
     notifyListeners();
   }
 
-  // 비밀번호 재인증 (보안 작업 전 확인)
   Future<bool> reauthenticate(String password) async {
     final user = _auth.currentUser;
     if (user == null || user.email == null) return false;
@@ -170,7 +176,6 @@ class AuthViewModel with ChangeNotifier {
     }
   }
 
-  // 회원 탈퇴 기능 추가
   Future<void> deleteAccount() async {
     final user = _auth.currentUser;
     if (user == null) return;
@@ -179,12 +184,27 @@ class AuthViewModel with ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1. Firestore 유저 데이터 삭제
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).delete();
+      final uid = user.uid;
+      final batch = _db.batch();
 
-      // 2. Firebase Auth 계정 삭제
+      final walks = await _db.collection('walks').where('userId', isEqualTo: uid).get();
+      for (var doc in walks.docs) { batch.delete(doc.reference); }
+
+      final pets = await _db.collection('pets').where('ownerId', isEqualTo: uid).get();
+      for (var doc in pets.docs) { batch.delete(doc.reference); }
+
+      final notifications = await _db.collection('notifications').where('userId', isEqualTo: uid).get();
+      for (var doc in notifications.docs) { batch.delete(doc.reference); }
+
+      if (_userModel != null) {
+        batch.delete(_db.collection('usernames').doc(_userModel!.nickname));
+      }
+
+      batch.delete(_db.collection('users').doc(uid));
+
+      await batch.commit();
       await user.delete();
-
+      
       _userModel = null;
       _userSub?.cancel();
     } on FirebaseAuthException catch (e) {
