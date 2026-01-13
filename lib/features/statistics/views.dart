@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'viewmodels.dart';
-import 'dart:async'; // StreamSubscription
 
 // [1] PetModel: 펫 정보를 담는 클래스
 class PetModel {
@@ -30,8 +29,6 @@ class StatisticsScreen extends StatefulWidget {
 
 class _StatisticsScreenState extends State<StatisticsScreen> {
   Map<String, String> _localPetNames = {};
-  // 월별 그래프 스크롤 제어용
-  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -39,14 +36,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<StatViewModel>().fetchStatistics();
     });
-    // 앱 시작 시 이름표 찾기 (백업용)
+    // 앱 시작 시 이름표 찾기
     _fetchAllPetNames();
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
   }
 
   // 이름표 찾기 로직
@@ -87,121 +78,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
   }
 
-  // 월별 그래프 자동 스크롤 (현재 월로 이동)
-  void _scrollToCurrentMonth() {
-    if (_scrollController.hasClients) {
-      final currentMonth = DateTime.now().month;
-      // 아이템 너비(약 40) + 간격 고려해서 이동
-      final double offset = (currentMonth - 1) * 45.0;
-
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            offset,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
-    }
-  }
-
-  // [신규 기능] 펫 삭제 및 산책 기록 연동 정리
-  Future<void> _deletePet(String petId, String petName) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    // 1. 삭제 확인 팝업
-    bool confirm = await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("반려동물 삭제"),
-        content: Text(
-            "'$petName'을(를) 삭제하시겠습니까?\n\n이 동물과 함께한 산책 기록도 모두 정리됩니다.\n(혼자 산책한 기록은 삭제되고, 같이 산책한 기록에서는 이 동물이 제외됩니다.)"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("취소"),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text("삭제"),
-          ),
-        ],
-      ),
-    ) ??
-        false;
-
-    if (!confirm) return;
-
-    try {
-      final firestore = FirebaseFirestore.instance;
-      final batch = firestore.batch();
-
-      // 2. 펫 문서 삭제
-      final petRef1 = firestore.collection('users').doc(user.uid).collection('pets').doc(petId);
-      final petRef2 = firestore.collection('pets').doc(petId);
-      batch.delete(petRef1);
-      batch.delete(petRef2);
-
-      // 3. 관련 산책 기록 찾기
-      final walkQuery1 = await firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('walks')
-          .where('petIds', arrayContains: petId)
-          .get();
-
-      final walkQuery2 = await firestore
-          .collection('walks')
-          .where('userId', isEqualTo: user.uid)
-          .where('petIds', arrayContains: petId)
-          .get();
-
-      final allWalkDocs = [...walkQuery1.docs, ...walkQuery2.docs];
-
-      // 4. 산책 기록 정리
-      for (var doc in allWalkDocs) {
-        final data = doc.data();
-        List<dynamic> petIds = List.from(data['petIds'] ?? []);
-        List<dynamic> savedNames = List.from(data['petNames'] ?? []);
-
-        petIds.remove(petId);
-        if (savedNames.contains(petName)) savedNames.remove(petName);
-
-        if (petIds.isEmpty) {
-          batch.delete(doc.reference);
-        } else {
-          batch.update(doc.reference, {
-            'petIds': petIds,
-            'petNames': savedNames,
-          });
-        }
-      }
-
-      await batch.commit();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("삭제 및 기록 정리가 완료되었습니다.")),
-        );
-        _fetchAllPetNames();
-        context.read<StatViewModel>().fetchStatistics();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("삭제 중 오류 발생: $e")),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    // [중요] 여기서 context.watch를 쓰면 버튼 누를 때마다 전체가 리빌드되어 깜빡입니다.
-    // 따라서 여기서는 제거하고 아래에서 Consumer를 씁니다.
+    final vm = context.watch<StatViewModel>();
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
@@ -213,20 +92,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       appBar: AppBar(
         title: const Text("통계", style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF4CAF50),
         elevation: 0,
-        foregroundColor: Colors.black,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              context.read<StatViewModel>().fetchStatistics();
-              _fetchAllPetNames();
-            },
-          )
-        ],
+        foregroundColor: Colors.white,
+        // actions: [] removed as requested
       ),
-      // [단계 1] 펫 명부 스트림 (이 부분은 버튼을 눌러도 다시 실행되지 않음)
+      // [단계 1] 펫 명부(Pets)를 먼저 실시간으로 구독합니다. (연동 준비)
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('pets')
@@ -241,10 +112,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               petMap[pet.id] = pet.name;
             }
           }
-          // 로컬 데이터 병합
-          petMap.addAll(_localPetNames);
 
-          // [단계 2] 산책 기록 스트림 (유지됨)
+          // [단계 2] 산책 기록 스트림 (마찬가지로 유지됨)
           return StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('users')
@@ -256,7 +125,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              // 에러 발생 시 Fallback
+              // 에러 발생 시 최상위 walks 경로로 Fallback 시도
               if (walkSnapshot.hasError) {
                 return StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance
@@ -265,13 +134,14 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         .snapshots(),
                     builder: (ctx, subSnap) {
                       if (subSnap.hasData) {
-                        // [핵심] Consumer로 감싸서 내용만 갱신
                         return Consumer<StatViewModel>(
-                          builder: (context, vm, child) => _buildContent(ctx, subSnap.data!.docs, vm, petMap),
+                          builder: (context, vm, child) {
+                            return _buildContent(ctx, subSnap.data!.docs, vm, petMap);
+                          },
                         );
                       }
                       if (subSnap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-                      // 에러 메시지 표시 안함 (깜빡임 방지용) 또는 조용히 처리
+                      // 에러 메시지는 생략하여 깜빡임 방지
                       return const Center(child: SizedBox());
                     }
                 );
@@ -279,13 +149,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
               final docs = walkSnapshot.data?.docs ?? [];
 
-              // [핵심] Consumer를 사용하여 vm 상태 변경 시(버튼 클릭) 내부 내용만 업데이트
+              // Consumer로 감싸서 VM 상태(일일/월별) 변경 시 내부만 갱신
               return Consumer<StatViewModel>(
                 builder: (context, vm, child) {
-                  // 월별 모드일 때 스크롤 이동 (최초 진입 시)
-                  if (vm.isMonthly && docs.isNotEmpty) {
-                    _scrollToCurrentMonth();
-                  }
                   return _buildContent(context, docs, vm, petMap);
                 },
               );
@@ -297,7 +163,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Widget _buildContent(BuildContext context, List<QueryDocumentSnapshot> docs, StatViewModel vm, Map<String, String> petMap) {
-    // 1. 데이터를 객체로 변환
+    // 1. 데이터 변환
     final allRecords = docs.map((doc) {
       final data = doc.data() as Map<String, dynamic>;
       return _mapToWalkRecord(doc.id, data);
@@ -306,69 +172,70 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     // 2. 통계 데이터 계산
     final stats = _calculateStats(allRecords, vm.isMonthly, petMap);
 
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // --- 상단 통계 ---
-            _buildToggleButtons(vm),
-            const SizedBox(height: 30),
-            _buildSummaryHeader(stats['totalDist'] as double, vm.isMonthly),
-            const SizedBox(height: 30),
-            _buildBarChart(stats['chartData'] as List<Map<String, dynamic>>, vm.isMonthly),
-            const SizedBox(height: 40),
+    return RefreshIndicator(
+      onRefresh: () async {
+        context.read<StatViewModel>().fetchStatistics();
+        await _fetchAllPetNames();
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // --- 상단 통계 ---
+              _buildToggleButtons(vm),
+              const SizedBox(height: 30),
+              _buildSummaryHeader(stats['totalDist'] as double, vm.isMonthly),
+              const SizedBox(height: 30),
+              _buildBarChart(stats['chartData'] as List<Map<String, dynamic>>, vm.isMonthly),
+              const SizedBox(height: 40),
 
-            // --- 분석 멘트 ---
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                vm.isMonthly ? "${DateTime.now().year}년 활동 분석" : "오늘은 어땠나요?",
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              // --- 분석 멘트 ---
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  vm.isMonthly ? "${DateTime.now().month}월에는?" : "오늘은 어땠나요?",
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
               ),
-            ),
-            const SizedBox(height: 15),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade200),
+              const SizedBox(height: 15),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: vm.isMonthly
+                    ? _buildMonthlyAnalysis(stats)
+                    : _buildDailyAnalysis(stats),
               ),
-              child: vm.isMonthly
-                  ? _buildMonthlyAnalysis(stats)
-                  : _buildDailyAnalysis(stats),
-            ),
 
-            const SizedBox(height: 30),
-            const Divider(thickness: 1, color: Colors.grey),
-            const SizedBox(height: 20),
+              const SizedBox(height: 30),
+              const Divider(thickness: 1, color: Colors.grey),
+              const SizedBox(height: 20),
 
-            // --- [하단] 반려동물별 합산 리스트 ---
-            Text(
-              vm.isMonthly ? "이번 달 활동 요약" : "오늘의 활동 요약",
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 5),
-            const Text(
-              "반려동물을 길게 누르면 기록을 삭제할 수 있습니다.",
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            const SizedBox(height: 15),
+              // --- 하단 리스트 ---
+              Text(
+                vm.isMonthly ? "이번 달 활동 요약" : "오늘의 활동 요약",
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 15),
 
-            _buildPetAggregatedList(allRecords, vm.isMonthly, petMap),
+              _buildPetAggregatedList(allRecords, vm.isMonthly, petMap),
 
-            const SizedBox(height: 40),
-          ],
+              const SizedBox(height: 40),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // [핵심] 하단 리스트: 펫별 통계
+  // [핵심] 하단 리스트: 펫별 통계 (삭제된 펫 숨김)
   Widget _buildPetAggregatedList(List<WalkRecord> allRecords, bool isMonthly, Map<String, String> petMap) {
     final now = DateTime.now();
     final todayStr = "${now.year}-${now.month}-${now.day}";
@@ -377,7 +244,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     Map<String, Map<String, double>> petStats = {};
 
     for (var r in allRecords) {
-      final rDate = r.startTime.toDate().toLocal();
+      final rDate = r.startTime.toDate();
       final rStr = "${rDate.year}-${rDate.month}-${rDate.day}";
       final rMonth = "${rDate.year}-${rDate.month}";
 
@@ -386,8 +253,14 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
       List<String> ids = [];
       if (r.petIds.isNotEmpty) {
-        ids = r.petIds;
+        // [중요] 명부(petMap)에 있는 ID만 추가 -> 삭제된 펫은 자동으로 제외됨
+        for (var id in r.petIds) {
+          if (petMap.containsKey(id)) {
+            ids.add(id);
+          }
+        }
       } else if (r.savedPetNames.isNotEmpty) {
+        // ID가 없고 이름만 있는 경우 (구버전 데이터)
         ids = r.savedPetNames;
       } else {
         ids = ["unknown"];
@@ -419,11 +292,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return Column(
       children: sorted.map((entry) {
         final id = entry.key;
+
+        // 이름 찾기
         String displayName = petMap[id] ?? id;
         if (id == "unknown") displayName = "혼자 산책";
 
         return _buildPetStatItem(
-            id, // ID 전달 (삭제용)
             displayName,
             entry.value['count']!.toInt(),
             entry.value['duration']!.toInt(),
@@ -433,55 +307,47 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  Widget _buildPetStatItem(String petId, String name, int count, int seconds, double distance) {
+  Widget _buildPetStatItem(String name, int count, int seconds, double distance) {
     final hours = seconds ~/ 3600;
     final minutes = (seconds % 3600) ~/ 60;
     String timeStr = "";
     if (hours > 0) timeStr += "${hours}시간 ";
     timeStr += "${minutes}분";
 
-    return InkWell(
-      onLongPress: () {
-        if (petId != "unknown" && !petId.startsWith("이름 미정")) {
-          _deletePet(petId, name);
-        }
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade200),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40, height: 40,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(8)),
-              child: const Text("🐶", style: TextStyle(fontSize: 20)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text("총 ${count}회 산책", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                ],
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40, height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(8)),
+            child: const Text("🐶", style: TextStyle(fontSize: 20)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(timeStr, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black, fontSize: 16)),
-                Text("${distance.toStringAsFixed(1)}km", style: const TextStyle(color: Color(0xFF4CAF50), fontSize: 12, fontWeight: FontWeight.bold)),
+                Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text("총 ${count}회 산책", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
               ],
-            )
-          ],
-        ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(timeStr, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black, fontSize: 16)),
+              Text("${distance.toStringAsFixed(1)}km", style: const TextStyle(color: Color(0xFF4CAF50), fontSize: 12, fontWeight: FontWeight.bold)),
+            ],
+          )
+        ],
       ),
     );
   }
@@ -515,32 +381,29 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
     // 그래프 데이터
     if (!isMonthly) {
-      // 일일: 최근 7일
       for (int i = 6; i >= 0; i--) {
         final day = now.subtract(Duration(days: i));
         final dStr = "${day.year}-${day.month}-${day.day}";
         double dTotal = 0;
         for (var r in records) {
-          final rDate = r.startTime.toDate().toLocal();
-          final rStr = "${rDate.year}-${rDate.month}-${rDate.day}";
+          final rStr = "${r.startTime.toDate().year}-${r.startTime.toDate().month}-${r.startTime.toDate().day}";
           if (rStr == dStr) dTotal += r.distance;
         }
         chartData.add({'label': "${day.day}일", 'value': dTotal, 'isToday': i == 0});
         if (i == 0) totalDist = dTotal;
       }
     } else {
-      // [수정] 월별: 1월 ~ 12월 (연간)
+      final lastDay = DateTime(now.year, now.month + 1, 0).day;
       for (int i = 1; i <= 12; i++) {
+        // 12월까지 표시, 올해 데이터만 합산
         double mTotal = 0;
         for (var r in records) {
-          final rDate = r.startTime.toDate().toLocal();
-          // 올해 데이터이면서 해당 월인지 확인
+          final rDate = r.startTime.toDate();
           if (rDate.year == now.year && rDate.month == i) {
             mTotal += r.distance;
           }
         }
         chartData.add({'label': "$i월", 'value': mTotal, 'isToday': i == now.month});
-        // 이번 달 총 거리 계산
         if (i == now.month) totalDist = mTotal;
       }
     }
@@ -555,7 +418,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     Map<String, Map<String, dynamic>> petStats = {};
 
     for (var r in records) {
-      final rDate = r.startTime.toDate().toLocal();
+      final rDate = r.startTime.toDate();
       final rStr = "${rDate.year}-${rDate.month}-${rDate.day}";
       final rMonthStr = "${rDate.year}-${rDate.month}";
 
@@ -571,7 +434,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
         List<String> names = [];
         if (r.petIds.isNotEmpty) {
-          names = r.petIds.map((id) => petMap[id] ?? id).toList();
+          // [중요 수정] 분석 통계에서도 삭제된 펫(명부에 없음)은 제외!
+          for (var id in r.petIds) {
+            if (petMap.containsKey(id)) {
+              names.add(petMap[id]!);
+            }
+          }
+          if (names.isEmpty && r.savedPetNames.isNotEmpty) names = r.savedPetNames;
         } else if (r.savedPetNames.isNotEmpty) {
           names = r.savedPetNames;
         } else {
@@ -657,7 +526,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               Text((item['value'] as double).toStringAsFixed(1), style: const TextStyle(fontSize: 10, color: Colors.grey)),
             const SizedBox(height: 4),
             Container(
-              width: isMonthly ? 12 : 14, // 월별 너비 조정
+              width: isMonthly ? 8 : 14,
               height: height > 4 ? height : 4,
               decoration: BoxDecoration(
                 color: item['isToday'] ? const Color(0xFF4CAF50) : Colors.grey[300],
@@ -674,10 +543,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     if (isMonthly) {
       return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          controller: _scrollController,
           child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10),
-              width: data.length * 40.0, // 12개월 * 40
+              width: data.length * 40.0,
               height: 200,
               child: chart
           )
@@ -707,8 +575,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
     final petStats = stats['petStats'] as Map<String, Map<String, dynamic>>;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      // [수정] 텍스트 수정
-      Text("올해 총 활동", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+      Text("${stats['totalDays']}일 중 ${stats['activeDays']}일", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
       Text("총 ${(stats['totalDist'] as double).toStringAsFixed(1)}km, 시간: $h:$m", style: const TextStyle(color: Colors.grey)),
       const Divider(height: 30),
       if (petStats.isEmpty) const Text("기록이 없습니다.", style: TextStyle(color: Colors.grey)),

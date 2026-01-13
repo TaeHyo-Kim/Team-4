@@ -35,7 +35,7 @@ class StatViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // [신규 기능] 펫 삭제 및 관련 산책 기록 정리 (Cascade Delete)
+  // [핵심 기능] 펫 삭제 시 산책 기록까지 연동하여 삭제하는 함수
   Future<void> deletePet(String petId) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -43,18 +43,17 @@ class StatViewModel extends ChangeNotifier {
     final firestore = FirebaseFirestore.instance;
 
     try {
-      print("🗑️ 펫 삭제 프로세스 시작: $petId");
+      print("🗑️ [삭제 시작] 펫 ID: $petId 정리 작업 수행 중...");
 
-      // 1. 펫 문서 삭제 (users/{uid}/pets)
+      // 1. 펫 정보 문서 삭제 (users/{uid}/pets 및 pets)
       await firestore.collection('users').doc(user.uid).collection('pets').doc(petId).delete();
 
-      // (혹시 모를 최상위 pets 경로도 삭제 시도)
+      // (혹시 모를 최상위 pets 경로도 삭제 시도 - 에러 무시)
       try {
         await firestore.collection('pets').doc(petId).delete();
       } catch (_) {}
 
-      // 2. 이 펫이 포함된 모든 산책 기록 찾기 (users/{uid}/walks)
-      // 'petIds' 배열에 petId가 포함된 문서 검색
+      // 2. 이 펫이 포함된 '모든' 산책 기록 찾기 (users/{uid}/walks)
       final walkQuery = await firestore
           .collection('users')
           .doc(user.uid)
@@ -62,43 +61,44 @@ class StatViewModel extends ChangeNotifier {
           .where('petIds', arrayContains: petId)
           .get();
 
-      print("  - 연관된 산책 기록 ${walkQuery.docs.length}개 발견. 정리 시작...");
+      print("  - 연관된 산책 기록 ${walkQuery.docs.length}개 발견.");
 
       final batch = firestore.batch();
       int batchCount = 0;
 
       for (var doc in walkQuery.docs) {
         final data = doc.data();
-        List<dynamic> petIds = List.from(data['petIds'] ?? []);
-        List<dynamic> savedNames = List.from(data['petNames'] ?? []);
 
-        // 펫 ID 제거
+        // 기존 petIds 리스트 가져오기
+        List<dynamic> petIds = List.from(data['petIds'] ?? []);
+
+        // [중요] 해당 펫 ID 제거
         petIds.remove(petId);
 
-        // (참고: savedNames는 이름 문자열이라 정확히 매칭해서 지우기 어렵지만,
-        // 보통 petIds와 인덱스가 같다고 가정하거나 생략합니다.
-        // 여기서는 ID 기준 처리가 가장 확실하므로 petIds만 처리해도 통계에서 빠집니다.)
-
+        // [핵심 로직] 남은 펫이 있는지 확인
         if (petIds.isEmpty) {
-          // 남은 펫이 없으면 (혼자 산책한 기록) -> 기록 자체를 삭제
+          // 남은 펫이 없으면 -> 혼자 산책한 기록이므로 문서 자체를 삭제
           batch.delete(doc.reference);
-          print("    - 기록 삭제 (혼자 산책): ${doc.id}");
+          print("    -> 기록 삭제 (혼자 산책): ${doc.id}");
         } else {
-          // 남은 펫이 있으면 -> 펫 목록만 업데이트 (함께 산책한 기록)
+          // 남은 펫이 있으면 -> 펫 목록만 업데이트 (같이 산책한 경우 기록 유지)
+          // (참고: petNames 필드도 있다면 갱신해주면 좋지만, ID 기준이 제일 정확함)
           batch.update(doc.reference, {'petIds': petIds});
-          print("    - 기록 수정 (함께 산책): ${doc.id}");
+          print("    -> 기록 수정 (같이 산책, ID제거): ${doc.id}");
         }
 
         batchCount++;
       }
 
+      // 배치 작업 커밋 (한번에 실행)
       if (batchCount > 0) {
         await batch.commit();
         print("✅ 산책 기록 정리 완료.");
       }
 
-      // 데이터 갱신
+      // 3. UI 갱신을 위해 데이터 다시 로드
       await fetchStatistics();
+      notifyListeners(); // 화면 갱신 알림
 
     } catch (e) {
       print("❌ 펫 삭제 중 오류 발생: $e");
