@@ -78,9 +78,90 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
   }
 
+  // [신규] 펫 삭제 및 산책 기록 정리 함수
+  Future<void> _deletePet(String petId, String petName) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    bool confirm = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("반려동물 삭제"),
+        content: Text("'$petName'을(를) 삭제하시겠습니까?\n관련된 산책 기록도 함께 정리됩니다."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("취소"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text("삭제"),
+          ),
+        ],
+      ),
+    ) ?? false;
+
+    if (!confirm) return;
+
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final batch = firestore.batch();
+
+      final petRef1 = firestore.collection('users').doc(user.uid).collection('pets').doc(petId);
+      final petRef2 = firestore.collection('pets').doc(petId);
+      batch.delete(petRef1);
+      batch.delete(petRef2);
+
+      final walkQuery1 = await firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('walks')
+          .where('petIds', arrayContains: petId)
+          .get();
+
+      final walkQuery2 = await firestore
+          .collection('walks')
+          .where('userId', isEqualTo: user.uid)
+          .where('petIds', arrayContains: petId)
+          .get();
+
+      final allDocs = [...walkQuery1.docs, ...walkQuery2.docs];
+
+      for (var doc in allDocs) {
+        final data = doc.data();
+        List<dynamic> petIds = List.from(data['petIds'] ?? []);
+        List<dynamic> savedNames = List.from(data['petNames'] ?? []);
+
+        petIds.remove(petId);
+        if (savedNames.contains(petName)) savedNames.remove(petName);
+
+        if (petIds.isEmpty) {
+          batch.delete(doc.reference);
+        } else {
+          batch.update(doc.reference, {
+            'petIds': petIds,
+            'petNames': savedNames,
+          });
+        }
+      }
+
+      await batch.commit();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("삭제 및 정리 완료")));
+        _fetchAllPetNames();
+        context.read<StatViewModel>().fetchStatistics();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("오류 발생: $e")));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final vm = context.watch<StatViewModel>();
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
@@ -95,9 +176,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         backgroundColor: const Color(0xFF4CAF50),
         elevation: 0,
         foregroundColor: Colors.white,
-        // actions: [] removed as requested
       ),
-      // [단계 1] 펫 명부(Pets)를 먼저 실시간으로 구독합니다. (연동 준비)
+      // [단계 1] 펫 명부(Pets) 구독
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('pets')
@@ -112,8 +192,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               petMap[pet.id] = pet.name;
             }
           }
+          petMap.addAll(_localPetNames);
 
-          // [단계 2] 산책 기록 스트림 (마찬가지로 유지됨)
+          // [단계 2] 산책 기록 스트림
           return StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('users')
@@ -125,7 +206,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              // 에러 발생 시 최상위 walks 경로로 Fallback 시도
               if (walkSnapshot.hasError) {
                 return StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance
@@ -141,7 +221,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         );
                       }
                       if (subSnap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-                      // 에러 메시지는 생략하여 깜빡임 방지
                       return const Center(child: SizedBox());
                     }
                 );
@@ -149,7 +228,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
               final docs = walkSnapshot.data?.docs ?? [];
 
-              // Consumer로 감싸서 VM 상태(일일/월별) 변경 시 내부만 갱신
               return Consumer<StatViewModel>(
                 builder: (context, vm, child) {
                   return _buildContent(context, docs, vm, petMap);
@@ -163,13 +241,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Widget _buildContent(BuildContext context, List<QueryDocumentSnapshot> docs, StatViewModel vm, Map<String, String> petMap) {
-    // 1. 데이터 변환
     final allRecords = docs.map((doc) {
       final data = doc.data() as Map<String, dynamic>;
       return _mapToWalkRecord(doc.id, data);
     }).toList();
 
-    // 2. 통계 데이터 계산
     final stats = _calculateStats(allRecords, vm.isMonthly, petMap);
 
     return RefreshIndicator(
@@ -184,15 +260,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- 상단 통계 ---
               _buildToggleButtons(vm),
               const SizedBox(height: 30),
-              _buildSummaryHeader(stats['totalDist'] as double, vm.isMonthly),
+
+              // [수정] 평행(정렬) 맞춘 헤더
+              _buildSummaryHeader(
+                  stats['totalDist'] as double,
+                  stats['headerTotalTime'] as int,
+                  vm.isMonthly
+              ),
+
               const SizedBox(height: 30),
               _buildBarChart(stats['chartData'] as List<Map<String, dynamic>>, vm.isMonthly),
               const SizedBox(height: 40),
 
-              // --- 분석 멘트 ---
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -218,7 +299,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               const Divider(thickness: 1, color: Colors.grey),
               const SizedBox(height: 20),
 
-              // --- 하단 리스트 ---
               Text(
                 vm.isMonthly ? "이번 달 활동 요약" : "오늘의 활동 요약",
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -235,7 +315,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  // [핵심] 하단 리스트: 펫별 통계 (삭제된 펫 숨김)
+  // [핵심] 하단 리스트: 펫별 통계
   Widget _buildPetAggregatedList(List<WalkRecord> allRecords, bool isMonthly, Map<String, String> petMap) {
     final now = DateTime.now();
     final todayStr = "${now.year}-${now.month}-${now.day}";
@@ -244,7 +324,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     Map<String, Map<String, double>> petStats = {};
 
     for (var r in allRecords) {
-      final rDate = r.startTime.toDate();
+      final rDate = r.startTime.toDate().toLocal();
       final rStr = "${rDate.year}-${rDate.month}-${rDate.day}";
       final rMonth = "${rDate.year}-${rDate.month}";
 
@@ -253,14 +333,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
       List<String> ids = [];
       if (r.petIds.isNotEmpty) {
-        // [중요] 명부(petMap)에 있는 ID만 추가 -> 삭제된 펫은 자동으로 제외됨
         for (var id in r.petIds) {
           if (petMap.containsKey(id)) {
             ids.add(id);
           }
         }
       } else if (r.savedPetNames.isNotEmpty) {
-        // ID가 없고 이름만 있는 경우 (구버전 데이터)
         ids = r.savedPetNames;
       } else {
         ids = ["unknown"];
@@ -292,12 +370,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return Column(
       children: sorted.map((entry) {
         final id = entry.key;
-
-        // 이름 찾기
         String displayName = petMap[id] ?? id;
         if (id == "unknown") displayName = "혼자 산책";
 
         return _buildPetStatItem(
+            id,
             displayName,
             entry.value['count']!.toInt(),
             entry.value['duration']!.toInt(),
@@ -307,53 +384,60 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  Widget _buildPetStatItem(String name, int count, int seconds, double distance) {
+  Widget _buildPetStatItem(String petId, String name, int count, int seconds, double distance) {
     final hours = seconds ~/ 3600;
     final minutes = (seconds % 3600) ~/ 60;
     String timeStr = "";
     if (hours > 0) timeStr += "${hours}시간 ";
     timeStr += "${minutes}분";
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40, height: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(8)),
-            child: const Text("🐶", style: TextStyle(fontSize: 20)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                Text("총 ${count}회 산책", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-              ],
+    return InkWell(
+      onLongPress: () {
+        if (petId != "unknown" && !petId.startsWith("이름 미정")) {
+          _deletePet(petId, name);
+        }
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40, height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(8)),
+              child: const Text("🐶", style: TextStyle(fontSize: 20)),
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(timeStr, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black, fontSize: 16)),
-              Text("${distance.toStringAsFixed(1)}km", style: const TextStyle(color: Color(0xFF4CAF50), fontSize: 12, fontWeight: FontWeight.bold)),
-            ],
-          )
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text("총 ${count}회 산책", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(timeStr, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black, fontSize: 16)),
+                Text("${distance.toStringAsFixed(1)}km", style: const TextStyle(color: Color(0xFF4CAF50), fontSize: 12, fontWeight: FontWeight.bold)),
+              ],
+            )
+          ],
+        ),
       ),
     );
   }
 
-  // --- 데이터 처리 및 통계 계산 헬퍼 ---
-
+  // --- 헬퍼 ---
   WalkRecord _mapToWalkRecord(String id, Map<String, dynamic> data) {
     Timestamp parseTimestamp(dynamic val) {
       if (val is Timestamp) return val;
@@ -377,34 +461,46 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final monthPrefix = "${now.year}-${now.month}";
 
     double totalDist = 0.0;
+    int headerTotalTime = 0;
     List<Map<String, dynamic>> chartData = [];
 
-    // 그래프 데이터
+    // 그래프 및 상단 총계 계산
     if (!isMonthly) {
       for (int i = 6; i >= 0; i--) {
         final day = now.subtract(Duration(days: i));
         final dStr = "${day.year}-${day.month}-${day.day}";
         double dTotal = 0;
+        int dTime = 0;
         for (var r in records) {
-          final rStr = "${r.startTime.toDate().year}-${r.startTime.toDate().month}-${r.startTime.toDate().day}";
-          if (rStr == dStr) dTotal += r.distance;
+          final rDate = r.startTime.toDate().toLocal();
+          final rStr = "${rDate.year}-${rDate.month}-${rDate.day}";
+          if (rStr == dStr) {
+            dTotal += r.distance;
+            dTime += r.duration;
+          }
         }
         chartData.add({'label': "${day.day}일", 'value': dTotal, 'isToday': i == 0});
-        if (i == 0) totalDist = dTotal;
+        if (i == 0) {
+          totalDist = dTotal;
+          headerTotalTime = dTime;
+        }
       }
     } else {
-      final lastDay = DateTime(now.year, now.month + 1, 0).day;
       for (int i = 1; i <= 12; i++) {
-        // 12월까지 표시, 올해 데이터만 합산
         double mTotal = 0;
+        int mTime = 0;
         for (var r in records) {
-          final rDate = r.startTime.toDate();
+          final rDate = r.startTime.toDate().toLocal();
           if (rDate.year == now.year && rDate.month == i) {
             mTotal += r.distance;
+            mTime += r.duration;
           }
         }
         chartData.add({'label': "$i월", 'value': mTotal, 'isToday': i == now.month});
-        if (i == now.month) totalDist = mTotal;
+        if (i == now.month) {
+          totalDist = mTotal;
+          headerTotalTime = mTime;
+        }
       }
     }
 
@@ -418,7 +514,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     Map<String, Map<String, dynamic>> petStats = {};
 
     for (var r in records) {
-      final rDate = r.startTime.toDate();
+      final rDate = r.startTime.toDate().toLocal();
       final rStr = "${rDate.year}-${rDate.month}-${rDate.day}";
       final rMonthStr = "${rDate.year}-${rDate.month}";
 
@@ -434,7 +530,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
         List<String> names = [];
         if (r.petIds.isNotEmpty) {
-          // [중요 수정] 분석 통계에서도 삭제된 펫(명부에 없음)은 제외!
           for (var id in r.petIds) {
             if (petMap.containsKey(id)) {
               names.add(petMap[id]!);
@@ -460,6 +555,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
     return {
       'totalDist': totalDist,
+      'headerTotalTime': headerTotalTime,
       'chartData': chartData,
       'yesterdayDist': yesterdayDist,
       'petCounts': petCounts,
@@ -469,8 +565,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       'totalDays': now.day,
     };
   }
-
-  // --- UI 위젯 ---
 
   Widget _buildToggleButtons(StatViewModel vm) {
     return Container(
@@ -501,12 +595,53 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  Widget _buildSummaryHeader(double totalDist, bool isMonthly) {
-    final label = isMonthly ? "이번 달 총 산책 거리" : "오늘 산책 거리";
-    return Column(children: [
-      Text("${totalDist.toStringAsFixed(1)}km", style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Color(0xFF4CAF50))),
-      Text(label, style: const TextStyle(color: Colors.grey)),
-    ]);
+  // [수정] 평행(수직 정렬) 맞춤
+  Widget _buildSummaryHeader(double totalDist, int totalSeconds, bool isMonthly) {
+    final label = isMonthly ? "이번 달 활동" : "오늘 활동";
+
+    final h = totalSeconds ~/ 3600;
+    final m = (totalSeconds % 3600) ~/ 60;
+    String timeStr = "${m}분";
+    if (h > 0) timeStr = "${h}시간 ${m}분";
+
+    return Column(
+      children: [
+        // Row의 수직 정렬(crossAxisAlignment)을 center로 설정하여 구분선을 중앙에 배치
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // 거리 그룹
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                    "${totalDist.toStringAsFixed(1)}",
+                    style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Color(0xFF4CAF50))
+                ),
+                const SizedBox(width: 4),
+                const Text("km", style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.bold)),
+              ],
+            ),
+
+            const SizedBox(width: 25),
+            Container(width: 1, height: 40, color: Colors.grey.shade300), // 구분선
+            const SizedBox(width: 25),
+
+            // 시간 그룹
+            // 시간 텍스트가 40폰트보다 작으므로(32), 시각적 균형을 위해 baseline 대신 center나 별도 처리
+            // 여기서는 Text 자체를 배치
+            Text(
+                timeStr,
+                style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF4CAF50))
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+        Text(label, style: const TextStyle(color: Colors.grey)),
+      ],
+    );
   }
 
   Widget _buildBarChart(List<Map<String, dynamic>> data, bool isMonthly) {
