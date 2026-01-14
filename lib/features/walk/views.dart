@@ -327,15 +327,11 @@ class _WalkScreenState extends State<WalkScreen> {
   }
 
   // [수정] 요약 화면: 후기 작성하기 버튼 로직 수정
+// [수정 2, 3, 4] 산책 요약 화면
   Widget _buildSummary(WalkViewModel vm) {
-    // 시간 포맷팅 (예: 14:30:05)
-    // DateFormat을 사용하여 에러 해결
-    String startTimeStr = vm.startTime != null
-        ? DateFormat('HH:mm:ss').format(vm.startTime!)
-        : "--:--";
-    String endTimeStr = vm.endTime != null
-        ? DateFormat('HH:mm:ss').format(vm.endTime!)
-        : "--:--";
+    String startTimeStr = vm.startTime != null ? DateFormat('HH:mm:ss').format(vm.startTime!) : "--:--";
+    // [수정 2] 종료 버튼 누른 시점의 시간 표시 (vm.endTime 사용)
+    String endTimeStr = vm.endTime != null ? DateFormat('HH:mm:ss').format(vm.endTime!) : "--:--";
 
     return Stack(
       children: [
@@ -350,16 +346,17 @@ class _WalkScreenState extends State<WalkScreen> {
               children: [
                 const Text("산책 완료! 🎉", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                 Text("시간: $startTimeStr ~ $endTimeStr", style: const TextStyle(color: Colors.grey)),
-                Text("거리: ${(vm.distance / 1000).toStringAsFixed(1)}km / 소요: ${vm.seconds ~/ 60}분"),
+                Text("거리: ${(vm.distance / 1000).toStringAsFixed(1)}km / 소요: ${vm.seconds ~/ 60}분 ${vm.seconds % 60}초"),
                 const SizedBox(height: 20),
                 Row(
-                  children: [
-                    Expanded(child: OutlinedButton(onPressed: () {}, child: const Text("지도 확인하기"))),
-                    const SizedBox(width: 10),
+                  children: [// [수정 4] 지도 확인하기 삭제 및 버튼 스타일 수정
                     Expanded(child: ElevatedButton(
-                      onPressed: () => vm.setWalkState(3), // [수정] 후기 작성 상태(3)로 변경
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-                      child: const Text("후기 작성하기"),
+                      onPressed: () => vm.setWalkState(3),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white, // [수정 4] 글자색 흰색
+                      ),
+                      child: const Text("후기 작성하기", style: TextStyle(fontWeight: FontWeight.bold)),
                     )),
                   ],
                 )
@@ -378,112 +375,67 @@ class _WalkScreenState extends State<WalkScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         children: [
-          const SizedBox(height: 40),
+          const SizedBox(height: 20),
           const Text("오늘의 산책은 어떠셨나요?",
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
 
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // 왼쪽 화살표
               IconButton(
-                icon: const Icon(Icons.arrow_back_ios, size: 30),
-                onPressed: vm.currentImageIndex > 0
-                    ? () => vm.setCurrentImageIndexDecrement()
-                    : null,
-                color: vm.currentImageIndex > 0 ? Colors.black : Colors.grey.withOpacity(0.3),
+                icon: const Icon(Icons.arrow_back_ios),
+                onPressed: () => vm.movePage(-1), // [수정 6] PageView 이동
               ),
-
-              // [수정 핵심] 사진 유무와 상관없이 동일한 크기를 유지하는 영역
               Expanded(
                 child: AspectRatio(
-                  aspectRatio: 1, // 1:1 비율(정사각형) 강제 유지
+                  aspectRatio: 1,
                   child: Container(
-                    // [추가] 내부 콘텐츠(아이콘 등)를 중앙에 배치하여 크기 변화 방지
-                    alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade50, // 빈 영역 배경색 (선택 사항)
                       border: Border.all(color: Colors.grey.shade300),
                       borderRadius: BorderRadius.circular(15),
                     ),
-                    // Stack을 사용하여 사진과 삭제 버튼(X)을 겹침
-                    child: Stack(
-                      alignment: Alignment.center, // Stack 내부 요소들도 중앙 정렬
-                      children: [
-                        // 사진이 없을 때 표시되는 아이콘 (Container 크기를 꽉 채우게 됨)
-                        if (vm.reviewImages.isEmpty)
-                          const Icon(Icons.image_not_supported, size: 80, color: Colors.grey)
-
-                        // 사진이 있을 때 표시되는 이미지
-                        else
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(15),
-                            child: Image.file(
-                              File(vm.reviewImages[vm.currentImageIndex].path),
-                              fit: BoxFit.cover,
-                              width: double.infinity, // 부모(Container) 너비에 맞춤
-                              height: double.infinity, // 부모(Container) 높이에 맞춤
+                    // [수정 6] 드래그(Swipe) 가능한 PageView 도입
+                    child: PageView.builder(
+                      controller: vm.pageController,
+                      onPageChanged: vm.onPageChanged,
+                      itemCount: vm.reviewImages.length == 0 ? 1 : vm.reviewImages.length,
+                      itemBuilder: (context, index) {
+                        if (vm.reviewImages.isEmpty) {
+                          return const Icon(Icons.image_not_supported, size: 80, color: Colors.grey);
+                        }
+                        return Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(15),
+                              child: Image.file(File(vm.reviewImages[index].path), fit: BoxFit.cover),
                             ),
-                          ),
-
-                        // 삭제 버튼 (사진이 있을 때만 표시)
-                        if (vm.reviewImages.isNotEmpty)
-                          Positioned(
-                            top: 10,
-                            right: 10,
-                            child: GestureDetector(
-                              onTap: () => vm.removeImage(vm.currentImageIndex),
-                              child: Container(
-                                decoration: const BoxDecoration(
-                                  color: Colors.black54,
-                                  shape: BoxShape.circle,
+                            Positioned(
+                              top: 10, right: 10,
+                              child: GestureDetector(
+                                onTap: () => vm.removeImage(index),
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                                  child: const Icon(Icons.close, color: Colors.white, size: 20),
                                 ),
-                                child: const Icon(Icons.close, color: Colors.white, size: 20),
                               ),
-                            ),
-                          ),
-                      ],
+                            )
+                          ],
+                        );
+                      },
                     ),
                   ),
                 ),
               ),
-
-              // 오른쪽 화살표
               IconButton(
-                icon: const Icon(Icons.arrow_forward_ios, size: 30),
-                onPressed: vm.currentImageIndex < vm.reviewImages.length - 1
-                    ? () => vm.setCurrentImageIndexIncrement()
-                    : null,
-                color: vm.currentImageIndex < vm.reviewImages.length - 1
-                    ? Colors.black
-                    : Colors.grey.withOpacity(0.3),
+                icon: const Icon(Icons.arrow_forward_ios),
+                onPressed: () => vm.movePage(1),
               ),
             ],
           ),
-
           const SizedBox(height: 10),
-
-          // [요구사항 2] 인디케이터 (제한 없이 모든 사진 표기)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(vm.totalDots, (index) {
-              Color dotColor = Colors.white;
-              if (vm.reviewImages.isNotEmpty) {
-                dotColor = (index == vm.currentImageIndex) ? Colors.black : Colors.grey;
-              }
-              return Container(
-                margin: const EdgeInsets.all(5),
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: dotColor,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.black26),
-                ),
-              );
-            }),
-          ),
+          _buildIndicator(vm), // [수정 7] 사진 바로 아래에만 표시 (최하단 호출 삭제)
           const SizedBox(height: 20),
 
           // [요구사항 4] 텍스트 유지 기능을 위한 TextField
@@ -502,26 +454,44 @@ class _WalkScreenState extends State<WalkScreen> {
           ),
           const SizedBox(height: 25),
 
-          // 이모지 선택 영역
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 12,
-            runSpacing: 12,
-            children: ['👍', '👌', '❤️', '💧', '👎', '🐕', '🐈', '🐶', '😊', '😍', '🥰', '😎', '🤗', '🎉', '✨', '🌟', '💪', '🏃', '🌳', '☀️'].map((e) => GestureDetector(
-              onTap: () => vm.setSelectedEmoji(e),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: vm.selectedEmoji == e ? Colors.orange.withOpacity(0.2) : Colors.transparent,
-                  border: Border.all(color: vm.selectedEmoji == e ? Colors.orange : Colors.transparent, width: 2),
-                ),
-                child: Text(e, style: const TextStyle(fontSize: 30)),
-              ),
-            )).toList(),
-          ),
-          const SizedBox(height: 30),
+          // [수정 3] 이모지 전체를 감싸는 하나의 블록 UI
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: Colors.grey.shade300),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 5개 이모지 행
+                ...vm.currentEmojiRow.map((e) => GestureDetector(
+                  onTap: () => vm.setSelectedEmoji(e),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      // [수정 3] 내가 선택한 이모지만 주황색 배경/테두리 강조
+                      color: vm.selectedEmoji == e ? Colors.orange.withOpacity(0.1) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: vm.selectedEmoji == e ? Colors.orange : Colors.transparent),
+                    ),
+                    child: Text(e, style: const TextStyle(fontSize: 24)),
+                  ),
+                )).toList(),
 
+                // 구분선 및 드롭다운 버튼
+                Container(width: 1, height: 24, color: Colors.grey.shade300, margin: const EdgeInsets.symmetric(horizontal: 8)),
+                IconButton(
+                  onPressed: () => _showEmojiPicker(context, vm),
+                  icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                )
+              ],
+            ),
+          ),
+          const SizedBox(height: 40),
           // 하단 액션 버튼
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -532,18 +502,37 @@ class _WalkScreenState extends State<WalkScreen> {
               ),
               const SizedBox(width: 20),
               ElevatedButton(
-                onPressed: () => vm.stopWalkAndSave(vm.reviewController.text),
+                onPressed: vm.isSaving ? null : () async { // [수정] 저장 중일 때 버튼 비활성화
+                  try {
+                    await vm.stopWalkAndSave(vm.reviewController.text);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("후기가 등록되었습니다!")),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("등록 실패: $e"), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
+                },
                 style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF4CAF50),
                     padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15)
                 ),
-                child: const Text("확인", style: TextStyle(color: Colors.white, fontSize: 18)),
-              ),
+                child: vm.isSaving
+                    ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                )
+                    : const Text("확인", style: TextStyle(color: Colors.white, fontSize: 18)),
+              )
             ],
           ),
-          const SizedBox(height: 10),
-          _buildIndicator(vm), // (인디케이터 로직 생략)
-          const SizedBox(height: 20),
+          const SizedBox(height: 40),
         ],
       ),
     );
@@ -568,6 +557,60 @@ class _WalkScreenState extends State<WalkScreen> {
           ),
         );
       }),
+    );
+  }
+
+  // [수정 10] 이모지 상세 선택 팝업
+  void _showEmojiPicker(BuildContext context, WalkViewModel vm) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+            height: 300,
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                const Text("상태를 선택해주세요", style: TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 16)),
+                const Divider(height: 30),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: vm.emojiGroups.length,
+                    itemBuilder: (context, groupIdx) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: vm.emojiGroups[groupIdx].map((emoji) =>
+                              GestureDetector(
+                                onTap: () {
+                                  // [핵심] 클릭한 이모지와 해당 행의 인덱스를 전달
+                                  vm.selectEmojiFromPopup(groupIdx, emoji);
+                                  Navigator.pop(context); // 선택 후 즉시 팝업 닫기
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    // 현재 선택된 이모지라면 팝업 내에서도 살짝 표시
+                                    color: vm.selectedEmoji == emoji ? Colors
+                                        .orange.withOpacity(0.1) : Colors
+                                        .transparent,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(emoji,
+                                      style: const TextStyle(fontSize: 30)),
+                                ),
+                              )).toList(),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
     );
   }
 
@@ -604,7 +647,8 @@ class _WalkScreenState extends State<WalkScreen> {
             distanceMeters: vm.distance,
             seconds: vm.seconds,
             onStart: () {},
-            onStop: () => vm.setWalkState(2), // 클릭 시 요약 단계(2)로 이동하며 기록 정지
+            // [변경] 단순히 walkState를 바꾸는 것이 아니라 vm.completeWalk()를 호출합니다.
+            onStop: () => vm.completeWalk(),
           ),
         ),
       ],

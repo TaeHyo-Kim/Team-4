@@ -14,16 +14,26 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 
 class WalkViewModel with ChangeNotifier {
   final WalkRepository _repo = WalkRepository();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  // [수정 10] 이모지 그룹화
+  final List<List<String>> emojiGroups = [
+    ['👍', '👌', '❤️', '😊', '🥰'], // 그룹 1 (기본 노출)
+    ['🐕', '🐈', '🐶', '🐾', '🦴'], // 그룹 2
+    ['🏃', '🌳', '☀️', '✨', '🌟'], // 그룹 3
+    ['💧', '👎', '😎', '🤗', '🎉'], // 그룹 4
+  ];
+  List<String> currentEmojiRow = ['👍', '👌', '❤️', '😊', '🥰'];
+
   // ------------------------------------------------------------------------
   // 상태 변수들
   // ------------------------------------------------------------------------
-
-// 카메라 제어용
+  Set<Marker> snapshotMarkers = {}; // 캡처 전용 마커 셋
+  // 카메라 제어용
   GoogleMapController? _mapController;
   Timer? _inactivityTimer;
   bool _isUserInteracting = false;
@@ -47,7 +57,8 @@ class WalkViewModel with ChangeNotifier {
   Map<String, dynamic>? selectedPet; // 단일 선택 (기존 호환성 유지)
   Map<String, dynamic>? recentWalk;
   Set<String> selectedPetIds = {}; // 여러 반려동물 선택용
-  StreamSubscription<QuerySnapshot>? _recentWalkSubscription; // 최근 산책 기록 실시간 스트림
+  StreamSubscription<
+      QuerySnapshot>? _recentWalkSubscription; // 최근 산책 기록 실시간 스트림
   StreamSubscription<QuerySnapshot>? _petsSubscription; // 반려동물 목록 실시간 스트림
 
   // 후기 작성 관련 필드
@@ -64,14 +75,21 @@ class WalkViewModel with ChangeNotifier {
   // Getters
   // ------------------------------------------------------------------------
   bool get isWalking => _isWalking;
+
   bool get isPaused => _isPaused;
+
   int get seconds => _seconds;
+
   double get distance => _distance;
+
   List<LatLng> get route => _route;
+
   LatLng? get currentPosition => _currentPosition;
+
   bool get isUserInteracting => _isUserInteracting;
+
   DateTime? get startTime => _startTime;
-  
+
   int get totalDots => reviewImages.isEmpty ? 1 : reviewImages.length;
 
   void setMapController(GoogleMapController controller) {
@@ -91,16 +109,20 @@ class WalkViewModel with ChangeNotifier {
   // 사용자가 터치를 뗐을 때 호출 (10초 카운트다운 시작)
   void onUserInteractionEnded() {
     _inactivityTimer?.cancel();
-    _inactivityTimer = Timer(const Duration(seconds: 10), () {
+    _inactivityTimer = Timer(const Duration(seconds: 5), () {
       _isUserInteracting = false;
       moveToCurrentLocation();
       notifyListeners();
     });
   }
 
-  // 현재 위치로 카메라 이동 (배율 15.0 고정)
+  // 현재 위치로 카메라 이동
+  // 1. 카메라 이동 함수에 try-catch와 mounted 체크(유사 로직) 추가
   Future<void> moveToCurrentLocation() async {
-    if (_currentPosition != null && _mapController != null) {
+    // 컨트롤러가 없거나 지도가 해제되었다면 실행하지 않음
+    if (_currentPosition == null || _mapController == null) return;
+
+    try {
       await _mapController!.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(
@@ -109,7 +131,16 @@ class WalkViewModel with ChangeNotifier {
           ),
         ),
       );
+    } catch (e) {
+      // 지도가 이미 dispose 되었을 때 발생하는 에러를 여기서 잡아줌
+      debugPrint("카메라 이동 중 에러 발생 (무시 가능): $e");
     }
+  }
+
+  void selectEmojiGroup(int groupIndex) {
+    currentEmojiRow = emojiGroups[groupIndex];
+    selectedEmoji = currentEmojiRow[0];
+    notifyListeners();
   }
 
   // 화면 진입 시 초기 위치 로드
@@ -156,7 +187,7 @@ class WalkViewModel with ChangeNotifier {
     _startTimer();
     _startLocationTracking();
     moveToCurrentLocation(); // 시작 시 중심 맞춤
-    
+
     // 산책 중 상태(1)로 변경
     walkState = 1;
     notifyListeners();
@@ -169,37 +200,37 @@ class WalkViewModel with ChangeNotifier {
       distanceFilter: 5,
     );
 
-    _positionStream = Geolocator.getPositionStream(locationSettings: locationSettings)
-        .listen((Position position) async {
-      if (_isPaused) return;
-      if (position.accuracy > _accuracyThreshold) return;
+    _positionStream =
+        Geolocator.getPositionStream(locationSettings: locationSettings)
+            .listen((Position position) async {
+          if (!_isWalking || walkState != 1) return;
 
-      final newPoint = LatLng(position.latitude, position.longitude);
+          final newPoint = LatLng(position.latitude, position.longitude);
+          // [추가] 로컬 DB에 즉시 저장
+          await WalkDbHelper.instance.insertPoint(
+              newPoint.latitude, newPoint.longitude);
 
-      // [추가] 로컬 DB에 즉시 저장
-      await WalkDbHelper.instance.insertPoint(newPoint.latitude, newPoint.longitude);
+          if (_route.isNotEmpty) {
+            final lastPoint = _route.last;
+            final dist = Geolocator.distanceBetween(
+              lastPoint.latitude, lastPoint.longitude,
+              newPoint.latitude, newPoint.longitude,
+            );
+            if (dist < 300) {
+              _distance += dist;
+              _route.add(newPoint);
+            }
+          } else {
+            _startPosition ??= newPoint;
+            _route.add(newPoint);
+          }
 
-      if (_route.isNotEmpty) {
-        final lastPoint = _route.last;
-        final dist = Geolocator.distanceBetween(
-          lastPoint.latitude, lastPoint.longitude,
-          newPoint.latitude, newPoint.longitude,
-        );
-        if (dist < 300) {
-          _distance += dist;
-          _route.add(newPoint);
-        }
-      } else {
-        _startPosition ??= newPoint;
-        _route.add(newPoint);
-      }
+          _currentPosition = newPoint;
 
-      _currentPosition = newPoint;
-
-      // 사용자가 조작 중이 아닐 때만 카메라 자동 추적
-      if (!_isUserInteracting) moveToCurrentLocation();
-      notifyListeners();
-    });
+          // 사용자가 조작 중이 아닐 때만 카메라 자동 추적
+          if (!_isUserInteracting) moveToCurrentLocation();
+          notifyListeners();
+        });
   }
 
   // 2. 일시정지 / 재개 - 삭제
@@ -214,7 +245,8 @@ class WalkViewModel with ChangeNotifier {
     String visibility = 'public',
     List<String> photoUrls = const [],
   }) async {
-    if (!_isWalking && walkState != 2) return;
+    // [수정] walkState 3(후기 작성 상태)에서도 저장이 가능하도록 조건 변경
+    if (!_isWalking && walkState != 2 && walkState != 3) return;
 
     final userId = _auth.currentUser?.uid;
     if (userId == null) return;
@@ -306,14 +338,23 @@ class WalkViewModel with ChangeNotifier {
   // 보정 로직을 위한 설정값
   final double _accuracyThreshold = 20.0; // 20m 이상 오차 무시
 
-  // 후기 작성 관련 메서드
+  // [추가 6] 스와이프 제어를 위한 컨트롤러
+  final PageController pageController = PageController();
+
+  // [수정 5] 다중 이미지 선택으로 변경
   Future<void> pickImage() async {
     final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      reviewImages.add(image);
+    // pickImage -> pickMultiImage로 변경
+    final List<XFile> images = await picker.pickMultiImage();
+    if (images.isNotEmpty) {
+      reviewImages.addAll(images);
       currentImageIndex = reviewImages.length - 1;
       notifyListeners();
+
+      // 새 사진 추가 후 해당 페이지로 이동
+      Future.delayed(const Duration(milliseconds: 100), () {
+        pageController.jumpToPage(currentImageIndex);
+      });
     }
   }
 
@@ -328,6 +369,198 @@ class WalkViewModel with ChangeNotifier {
       notifyListeners();
     }
   }
+
+// [수정] 산책 종료 버튼 클릭 시 실행될 핵심 로직
+  Future<void> completeWalk() async {
+    if (!_isWalking) return;
+
+    try {
+      // [중요] 기존에 돌아가고 있던 '5초 대기 타이머'를 즉시 제거
+      _inactivityTimer?.cancel();
+      _inactivityTimer = null;
+
+      // 1. 상태 즉시 변경 (시간/거리 갱신 중단)
+      _isWalking = false;
+      endTime = DateTime.now(); // [해결] 종료 시점의 시간을 기록하여 --:-- 표기 방지
+
+      // 타이머 및 위치 스트림 종료
+      _timer?.cancel();
+      _timer = null;
+      _positionStream?.cancel();
+      _positionStream = null;
+
+      notifyListeners(); // 요약 화면으로 넘어가기 전 상태 업데이트
+
+      // 2. 스냅샷 촬영 (전체 경로가 보이도록 카메라 조정 후 캡처)
+      await _captureFullRouteSnapshot();
+
+      // 3. 화면 상태 전환 (요약 화면(2)으로 이동)
+      walkState = 2;
+      notifyListeners();
+    } catch (e) {
+      debugPrint("산책 종료 중 오류 발생: $e");
+      // 종료 프로세스 자체에 에러가 나도 요약 화면으로 일단 보내거나 에러 알림
+      walkState = 2;
+      notifyListeners();
+    }
+  }
+
+  // [수정 1] 산책 종료 시 전체 경로 캡처 로직
+  Future<void> finishWalkWithSnapshot() async {
+    if (_route.isEmpty || _mapController == null) {
+      finishWalk();
+      return;
+    }
+
+    // 1. 전체 경로가 다 보이도록 좌표 경계 계산
+    LatLngBounds bounds = _getBounds(_route);
+
+    // 2. 지도 배율 조정 (Padding 50 주어 여유 있게 보정)
+    await _mapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(bounds, 50));
+
+    // 3. 지도가 렌더링될 때까지 잠시 대기 후 캡처
+    await Future.delayed(const Duration(milliseconds: 500));
+    final Uint8List? imageBytes = await _mapController!.takeSnapshot();
+
+    if (imageBytes != null) {
+      // 4. 바이트 데이터를 임시 파일로 저장하여 이미지 리스트 첫 번째에 추가
+      final tempDir = await getTemporaryDirectory();
+      final file = await File('${tempDir.path}/walk_snap_${DateTime
+          .now()
+          .millisecondsSinceEpoch}.png').create();
+      await file.writeAsBytes(imageBytes);
+
+      reviewImages.insert(0, XFile(file.path)); // 첫 번째 사진으로 삽입
+    }
+
+    finishWalk(); // 기존 종료 로직 호출 (상태 2로 변경 등)
+  }
+
+  // [수정 1] 스냅샷 캡처 (시작점: 빨강, 도착점: 파랑)
+  Future<void> captureSnapshot() async {
+    if (_route.isEmpty || _mapController == null) return;
+
+    // 1. 시작점과 끝점 마커 설정 (기존 펫 마커 제외)
+    snapshotMarkers = {
+      Marker(
+        markerId: const MarkerId("start"),
+        position: _route.first,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+      ),
+      Marker(
+        markerId: const MarkerId("end"),
+        position: _route.last,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+      ),
+    };
+    notifyListeners();
+
+    // 2. 경로가 모두 보이도록 카메라 조정
+    LatLngBounds bounds = _getBounds(_route);
+    await _mapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(bounds, 50));
+
+    // 3. 렌더링 대기 후 캡처
+    await Future.delayed(const Duration(milliseconds: 600));
+    final Uint8List? imageBytes = await _mapController!.takeSnapshot();
+
+    if (imageBytes != null) {
+      final tempDir = await getTemporaryDirectory();
+      final file = await File('${tempDir.path}/walk_${DateTime
+          .now()
+          .millisecondsSinceEpoch}.png').create();
+      await file.writeAsBytes(imageBytes);
+      reviewImages.insert(0, XFile(file.path));
+    }
+
+    // 캡처 후 상태 업데이트
+    snapshotMarkers.clear();
+    notifyListeners();
+  }
+
+  // [추가] 경로 전체 스냅샷 캡처 로직
+  Future<void> _captureFullRouteSnapshot() async {
+    // 지도가 없거나 경로가 없으면 즉시 리턴
+    if (_route.isEmpty || _mapController == null) return;
+
+    try {
+      // 1) 전체 경로를 포함하는 경계(Bounds) 계산
+      LatLngBounds bounds = _getBounds(_route);
+
+      // 2) 모든 경로가 보이도록 카메라 이동 (여백 50)
+      await _mapController!.animateCamera(
+          CameraUpdate.newLatLngBounds(bounds, 50));
+
+      // 3) 지도가 완전히 렌더링될 때까지 충분히 대기 (중요)
+      await Future.delayed(const Duration(milliseconds: 800));
+
+      // 여기서 "Bad state" 에러가 날 확률이 높으므로 다시 한 번 체크
+      if (_mapController != null) {
+        // 4) 스냅샷 촬영
+        final Uint8List? imageBytes = await _mapController!.takeSnapshot();
+
+        if (imageBytes != null) {
+          final tempDir = await getTemporaryDirectory();
+          final file = await File('${tempDir.path}/walk_snap_${DateTime
+              .now()
+              .millisecondsSinceEpoch}.png').create();
+          await file.writeAsBytes(imageBytes);
+
+          // 5) 후기 이미지 리스트의 '첫 번째' 인덱스에 삽입
+          reviewImages.insert(0, XFile(file.path));
+          debugPrint("전체 경로 스냅샷이 reviewImages[0]에 저장되었습니다.");
+        }
+      }
+    } catch (e) {
+      debugPrint("스냅샷 캡처 중 오류 발생: $e");
+    }
+  }
+
+  // [수정 3] 이모지 선택 시 행 교체 로직 (첫 번째가 아닌 선택한 것이 강조됨)
+  void selectEmojiFromPopup(int groupIndex, String emoji) {
+    currentEmojiRow = emojiGroups[groupIndex];
+    selectedEmoji = emoji; // 내가 선택한 이모지를 유지
+    notifyListeners();
+  }
+
+  // 좌표 리스트로부터 Bounds 계산 유틸리티
+  LatLngBounds _getBounds(List<LatLng> points) {
+    double minLat = points.first.latitude;
+    double maxLat = points.first.latitude;
+    double minLng = points.first.longitude;
+    double maxLng = points.first.longitude;
+
+    for (var point in points) {
+      if (point.latitude < minLat) minLat = point.latitude;
+      if (point.latitude > maxLat) maxLat = point.latitude;
+      if (point.longitude < minLng) minLng = point.longitude;
+      if (point.longitude > maxLng) maxLng = point.longitude;
+    }
+    return LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
+    );
+  }
+
+  // [추가] 페이지 변경 시 인덱스 동기화
+  void onPageChanged(int index) {
+    currentImageIndex = index;
+    notifyListeners();
+  }
+
+  // [수정] 화살표 클릭 시 PageView 이동
+  void movePage(int direction) {
+    int nextIndex = currentImageIndex + direction;
+    if (nextIndex >= 0 && nextIndex < reviewImages.length) {
+      pageController.animateToPage(
+        nextIndex,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
 
   void setCurrentImageIndex(int index) {
     if (index >= 0 && index < reviewImages.length) {
@@ -381,7 +614,8 @@ class WalkViewModel with ChangeNotifier {
 
       final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
       final Canvas canvas = Canvas(pictureRecorder);
-      final Paint paint = Paint()..isAntiAlias = true;
+      final Paint paint = Paint()
+        ..isAntiAlias = true;
       final double radius = 80.0; // 반지름 (가로세로 160의 절반)
 
       // 원형 클리핑 및 이미지 그리기
@@ -390,8 +624,10 @@ class WalkViewModel with ChangeNotifier {
       canvas.drawImage(image, Offset.zero, paint);
 
       // 3. 최종 비트맵 변환
-      final ui.Image finalImage = await pictureRecorder.endRecording().toImage(160, 160);
-      final ByteData? byteData = await finalImage.toByteData(format: ui.ImageByteFormat.png);
+      final ui.Image finalImage = await pictureRecorder.endRecording().toImage(
+          160, 160);
+      final ByteData? byteData = await finalImage.toByteData(
+          format: ui.ImageByteFormat.png);
       final Uint8List finalBytes = byteData!.buffer.asUint8List();
 
       return BitmapDescriptor.fromBytes(finalBytes);
@@ -406,52 +642,67 @@ class WalkViewModel with ChangeNotifier {
     endTime = DateTime.now();
     _isWalking = false; // 산책 버튼 잠김 해제의 핵심
     _timer?.cancel();
+    _timer = null; // 재확인 방지
     _positionStream?.cancel();
+    _positionStream = null;
     walkState = 2; // 요약 화면으로 이동
     notifyListeners();
   }
 
+  bool _isSaving = false; // 중복 저장 방지 플래그
+  // [추가] 외부에서 접근 가능한 Getter 정의
+  bool get isSaving => _isSaving;
+
   // 산책 종료 및 저장 (후기 포함)
   Future<void> stopWalkAndSave(String memo) async {
-    if (!_isWalking && walkState != 2) return;
+    // 1. 중복 클릭 방지 (로그의 StorageTask 성공 후 취소 에러 관련)
+    if (_isSaving) return;
 
-    final userId = _auth.currentUser?.uid;
-    if (userId == null) return;
+    try {
+      _isSaving = true; // 저장 시작
+      notifyListeners();
 
-    // 이미지 업로드
-    List<String> photoUrls = [];
-    if (reviewImages.isNotEmpty) {
-      final storage = FirebaseStorage.instance;
+      // [보강 2] 사용자 체크: 로그인이 안 되어 있으면 에러를 던져야 함
+      final userId = _auth.currentUser?.uid;
+      if (userId == null) {
+        throw Exception("로그인 정보가 없습니다. 다시 로그인 해주세요.");
+      }
+
+      // 이미지 업로드
+      // 1. 이미지 업로드 (로그상 이 부분은 현재 성공 중)
+      List<String> photoUrls = [];
       for (final imageFile in reviewImages) {
-        try {
-          final ref = storage
-              .ref()
-              .child('walks/${userId}/${DateTime.now().millisecondsSinceEpoch}_${imageFile.name}');
-          await ref.putFile(File(imageFile.path));
+        final ref = FirebaseStorage.instance.ref().child('walks/$userId/${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+        // 업로드 실행 및 완료 대기
+        final uploadTask = await ref.putFile(File(imageFile.path));
+        if (uploadTask.state == TaskState.success) {
           final url = await ref.getDownloadURL();
           photoUrls.add(url);
-        } catch (e) {
-          debugPrint("이미지 업로드 실패: $e");
         }
       }
+
+      // 2. ★ Firestore 저장 (이 부분이 실패할 확률이 높음)
+      // stopWalk 함수 내부에 반드시 await _repo.saveWalk(...)가 있어야 합니다.
+      await stopWalk(
+        memo: memo,
+        emoji: selectedEmoji,
+        visibility: 'public',
+        photoUrls: photoUrls,
+      );
+
+      // 3. 모든 작업 완료 후 초기화
+      walkState = 0;
+      reviewImages.clear();
+      reviewController.clear();
+
+    } catch (e) {
+      debugPrint("최종 단계 실패 에러 내용: $e");
+      rethrow; // View의 try-catch로 에러 전달
+    } finally {
+      _isSaving = false;
+      notifyListeners();
     }
-
-    // stopWalk 호출하여 저장
-    await stopWalk(
-      memo: memo,
-      emoji: selectedEmoji,
-      visibility: 'public',
-      photoUrls: photoUrls,
-    );
-
-    // 상태 초기화
-    walkState = 0; // 홈으로 복귀
-    reviewImages.clear();
-    currentImageIndex = 0;
-    reviewController.clear();
-    selectedEmoji = '👍';
-    endTime = null;
-    notifyListeners();
   }
 
   void _saveToLocalCache(List<LatLng> points) {
@@ -468,6 +719,7 @@ class WalkViewModel with ChangeNotifier {
     _recentWalkSubscription?.cancel();
     _petsSubscription?.cancel();
     reviewController.dispose();
+    _mapController = null; // 컨트롤러 참조 해제
     super.dispose();
   }
 
@@ -540,8 +792,9 @@ class WalkViewModel with ChangeNotifier {
 
     if (myPets.isNotEmpty) {
       // 대표 반려동물을 기본값으로 설정
-      selectedPet = myPets.firstWhere((p) => p['isPrimary'] == true, orElse: () => myPets.first);
-      
+      selectedPet = myPets.firstWhere((p) => p['isPrimary'] == true,
+          orElse: () => myPets.first);
+
       // 대표 반려동물이 선택되지 않은 경우에만 자동으로 선택된 상태로 설정
       if (selectedPetIds.isEmpty) {
         final primaryPetId = selectedPet?['id'] as String?;
@@ -553,7 +806,7 @@ class WalkViewModel with ChangeNotifier {
         final existingSelectedIds = selectedPetIds.where((id) {
           return myPets.any((pet) => pet['id'] == id);
         }).toSet();
-        
+
         if (existingSelectedIds.isEmpty && myPets.isNotEmpty) {
           final primaryPetId = selectedPet?['id'] as String?;
           if (primaryPetId != null) {
@@ -587,9 +840,9 @@ class WalkViewModel with ChangeNotifier {
         .where('ownerId', isEqualTo: uid)
         .snapshots()
         .listen(
-      (snapshot) {
+          (snapshot) {
         debugPrint('반려동물 목록 업데이트: ${snapshot.docs.length}개');
-        
+
         // 문서 ID도 함께 저장
         myPets = snapshot.docs.map((doc) {
           final data = doc.data();
@@ -635,8 +888,10 @@ class WalkViewModel with ChangeNotifier {
           // endTime 기준으로 정렬
           final sorted = snapshot.docs.toList();
           sorted.sort((a, b) {
-            final aEndTime = (a.data()['endTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
-            final bEndTime = (b.data()['endTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+            final aEndTime = (a.data()['endTime'] as Timestamp?)?.toDate() ??
+                DateTime(1970);
+            final bEndTime = (b.data()['endTime'] as Timestamp?)?.toDate() ??
+                DateTime(1970);
             return bEndTime.compareTo(aEndTime);
           });
           recentWalk = sorted.first.data();
@@ -666,7 +921,7 @@ class WalkViewModel with ChangeNotifier {
         .limit(1)
         .snapshots()
         .listen(
-      (snapshot) {
+          (snapshot) {
         if (snapshot.docs.isNotEmpty) {
           recentWalk = snapshot.docs.first.data();
         } else {
@@ -694,13 +949,15 @@ class WalkViewModel with ChangeNotifier {
         .where('userId', isEqualTo: uid)
         .snapshots()
         .listen(
-      (snapshot) {
+          (snapshot) {
         if (snapshot.docs.isNotEmpty) {
           // endTime 기준으로 정렬
           final sorted = snapshot.docs.toList();
           sorted.sort((a, b) {
-            final aEndTime = (a.data()['endTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
-            final bEndTime = (b.data()['endTime'] as Timestamp?)?.toDate() ?? DateTime(1970);
+            final aEndTime = (a.data()['endTime'] as Timestamp?)?.toDate() ??
+                DateTime(1970);
+            final bEndTime = (b.data()['endTime'] as Timestamp?)?.toDate() ??
+                DateTime(1970);
             return bEndTime.compareTo(aEndTime);
           });
           recentWalk = sorted.first.data();
@@ -741,5 +998,4 @@ class WalkViewModel with ChangeNotifier {
     walkState = state;
     notifyListeners();
   }
-
 }
