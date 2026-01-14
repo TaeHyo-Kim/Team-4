@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../data/repositories.dart'; // 통합 리포지토리 import
 import '../auth/models.dart';         // 유저 모델 import
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SocialViewModel with ChangeNotifier {
-  final SocialRepository _repo = SocialRepository();
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  final SocialRepository _repo = SocialRepository();
 
   List<UserModel> _allUsers = [];
   List<UserModel> _filteredUsers = [];
@@ -23,6 +26,59 @@ class SocialViewModel with ChangeNotifier {
 
   SocialViewModel() {
     fetchUsers();
+  }
+
+  Future<void> toggleLike({
+    required String walkId,
+    required String ownerId,
+    required String myNickname,
+  }) async {
+    final myUid = _auth.currentUser?.uid;
+    if (myUid == null) return;
+
+    final walkRef = FirebaseFirestore.instance.collection('walks').doc(walkId);
+    final likeRef = walkRef.collection('likes').doc(myUid);
+    final notificationRef = FirebaseFirestore.instance.collection('notifications');
+
+    // 1. 현재 좋아요 상태 확인
+    final likeDoc = await likeRef.get();
+    final isAdding = !likeDoc.exists;
+
+    try {
+      if (isAdding) {
+        // 좋아요 추가
+        await likeRef.set({
+          'nickname': myNickname,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+
+        // walk 문서의 likeCount 업데이트 (이미지 구조에 맞춰서)
+        await walkRef.update({'likeCount': FieldValue.increment(1)});
+
+        // 알림 추가 (이미지_281956.png 구조 참고)
+        await notificationRef.add({
+          'body': "회원님의 산책 기록을 좋아합니다.",
+          'createdAt': FieldValue.serverTimestamp(),
+          'fromUserId': myUid,
+          'fromUserNickname': myNickname,
+          'postId': walkId,
+          'read': false,
+          'title': "$myNickname님이 내 기록을 좋아합니다.",
+          'type': "like",
+          'userId': ownerId, // 게시물 주인 ID
+        });
+      } else {
+        // 좋아요 취소
+        await likeRef.delete();
+        await walkRef.update({'likeCount': FieldValue.increment(-1)});
+
+        // (옵션) 좋아요 취소 시 기존 알림을 삭제하고 싶다면 추가 로직 필요
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Like Toggle Error: $e");
+      rethrow;
+    }
   }
 
   Future<void> fetchUsers() async {
@@ -148,4 +204,23 @@ class SocialViewModel with ChangeNotifier {
 
   bool isFollowing(String uid) => _followingIds.contains(uid);
   bool isBlocked(String uid) => _blockedIds.contains(uid);
+
+  // [추가] 좋아요 누른 사람들 목록 가져오기 UI 반영
+  Future<List<Map<String, dynamic>>> getLikers(String walkId) async {
+    final snapshot = await _db.collection('walks').doc(walkId).collection('likes').get();
+    List<Map<String, dynamic>> likers = [];
+
+    for (var doc in snapshot.docs) {
+      final userDoc = await _db.collection('users').doc(doc.id).get();
+      if (userDoc.exists) {
+        likers.add({
+          'uid': doc.id,
+          'nickname': userDoc.data()?['nickname'] ?? '익명',
+          'profileImageUrl': userDoc.data()?['profileImageUrl'] ?? '',
+          'email': userDoc.data()?['email'] ?? '',
+        });
+      }
+    }
+    return likers;
+  }
 }

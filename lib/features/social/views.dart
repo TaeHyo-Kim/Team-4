@@ -10,6 +10,7 @@ import '../profile/views.dart';
 import '../profile/viewmodels.dart';
 import '../walk/models.dart';
 import '../pet/viewmodels.dart';
+import '../auth/viewmodels.dart';
 
 class SocialScreen extends StatefulWidget {
   const SocialScreen({super.key});
@@ -61,7 +62,8 @@ class _SocialScreenState extends State<SocialScreen> {
                 prefixIcon: const Icon(Icons.search, color: Color(0xFF4CAF50)),
                 filled: true,
                 fillColor: Colors.grey[100],
-                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                contentPadding: const EdgeInsets.symmetric(
+                    vertical: 0, horizontal: 16),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(30),
                   borderSide: BorderSide.none,
@@ -110,7 +112,8 @@ class _SocialScreenState extends State<SocialScreen> {
     );
   }
 
-  Widget _buildUserTile(BuildContext context, UserModel user, SocialViewModel vm) {
+  Widget _buildUserTile(BuildContext context, UserModel user,
+      SocialViewModel vm) {
     final isFollowing = vm.isFollowing(user.uid);
 
     return ListTile(
@@ -118,7 +121,8 @@ class _SocialScreenState extends State<SocialScreen> {
       leading: CircleAvatar(
         radius: 24,
         backgroundColor: Colors.grey[300],
-        backgroundImage: user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty
+        backgroundImage: user.profileImageUrl != null &&
+            user.profileImageUrl!.isNotEmpty
             ? NetworkImage(user.profileImageUrl!)
             : null,
         child: (user.profileImageUrl == null || user.profileImageUrl!.isEmpty)
@@ -147,10 +151,12 @@ class _SocialScreenState extends State<SocialScreen> {
           }
         },
         style: ElevatedButton.styleFrom(
-          backgroundColor: isFollowing ? Colors.grey[200] : const Color(0xFFFF9800),
+          backgroundColor: isFollowing ? Colors.grey[200] : const Color(
+              0xFFFF9800),
           foregroundColor: isFollowing ? Colors.black87 : Colors.white,
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20)),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         ),
         child: Text(
@@ -198,7 +204,8 @@ class _OtherUserProfileViewState extends State<OtherUserProfileView> {
 
     try {
       // 1. 최신 유저 정보 및 팔로우 관계 확인
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(widget.user.uid).get();
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(
+          widget.user.uid).get();
       final followingMeMeDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.user.uid)
@@ -210,13 +217,15 @@ class _OtherUserProfileViewState extends State<OtherUserProfileView> {
         setState(() {
           if (userDoc.exists) _latestUser = UserModel.fromDocument(userDoc);
           _isTargetFollowingMe = followingMeMeDoc.exists;
-          _isMeFollowingTarget = context.read<SocialViewModel>().isFollowing(widget.user.uid);
+          _isMeFollowingTarget =
+              context.read<SocialViewModel>().isFollowing(widget.user.uid);
           _isLoadingInfo = false;
         });
       }
 
       // 2. 피드 데이터 로드
-      await context.read<ProfileViewModel>().fetchOtherUserWalks(widget.user.uid);
+      await context.read<ProfileViewModel>().fetchOtherUserWalks(
+          widget.user.uid);
     } catch (e) {
       debugPrint("정보 로드 실패: $e");
       if (mounted) setState(() => _isLoadingInfo = false);
@@ -246,7 +255,8 @@ class _OtherUserProfileViewState extends State<OtherUserProfileView> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text("${userToShow.nickname}님의 프로필",
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF4CAF50),
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -268,10 +278,12 @@ class _OtherUserProfileViewState extends State<OtherUserProfileView> {
                 CircleAvatar(
                   radius: 45,
                   backgroundColor: Colors.grey[200],
-                  backgroundImage: (userToShow.profileImageUrl != null && userToShow.profileImageUrl!.isNotEmpty)
+                  backgroundImage: (userToShow.profileImageUrl != null &&
+                      userToShow.profileImageUrl!.isNotEmpty)
                       ? NetworkImage(userToShow.profileImageUrl!)
                       : null,
-                  child: (userToShow.profileImageUrl == null || userToShow.profileImageUrl!.isEmpty)
+                  child: (userToShow.profileImageUrl == null ||
+                      userToShow.profileImageUrl!.isEmpty)
                       ? const Icon(Icons.person, size: 45, color: Colors.white)
                       : null,
                 ),
@@ -281,11 +293,14 @@ class _OtherUserProfileViewState extends State<OtherUserProfileView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(userToShow.nickname,
-                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                      if (userToShow.bio != null && userToShow.bio!.isNotEmpty) ...[
+                          style: const TextStyle(
+                              fontSize: 20, fontWeight: FontWeight.bold)),
+                      if (userToShow.bio != null &&
+                          userToShow.bio!.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Text(userToShow.bio!,
-                            style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                            style: const TextStyle(color: Colors.grey,
+                                fontSize: 13)),
                       ],
                       const SizedBox(height: 12),
                       UserStatsRow(
@@ -303,9 +318,13 @@ class _OtherUserProfileViewState extends State<OtherUserProfileView> {
                     _refreshAll();
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: isFollowing ? Colors.grey[300] : const Color(0xFFFF9800),
-                    foregroundColor: isFollowing ? Colors.black87 : Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    backgroundColor: isFollowing
+                        ? Colors.grey[300]
+                        : const Color(0xFFFF9800),
+                    foregroundColor: isFollowing ? Colors.black87 : Colors
+                        .white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
                   ),
                   child: Text(isFollowing ? "팔로잉" : "팔로우",
                       style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -317,43 +336,48 @@ class _OtherUserProfileViewState extends State<OtherUserProfileView> {
 
           // 피드 영역 (공개 범위에 따른 처리)
           Expanded(
-            child: _isLoadingInfo 
-              ? const Center(child: CircularProgressIndicator())
-              : !_canSeeFeed() 
+            child: _isLoadingInfo
+                ? const Center(child: CircularProgressIndicator())
+                : !_canSeeFeed()
                 ? _buildLockedScreen(userToShow.visibility)
                 : profileVM.isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : profileVM.otherUserWalkRecords.isEmpty
-                    ? const Center(child: Text("아직 산책 기록이 없습니다.", style: TextStyle(color: Colors.grey)))
-                    : GridView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: profileVM.otherUserWalkRecords.length,
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          crossAxisSpacing: 8,
-                          mainAxisSpacing: 8,
-                        ),
-                        itemBuilder: (context, index) {
-                          final walk = profileVM.otherUserWalkRecords[index];
-                          final photoUrl = walk.photoUrls.isNotEmpty ? walk.photoUrls[0] : null;
-                          return GestureDetector(
-                            onTap: () => _showWalkDetail(context, walk),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.grey[100],
-                                borderRadius: BorderRadius.circular(12),
-                                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)],
-                              ),
-                              child: photoUrl != null
-                                  ? ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: Image.network(photoUrl, fit: BoxFit.cover),
-                              )
-                                  : const Icon(Icons.directions_walk, color: Colors.grey),
-                            ),
-                          );
-                        },
-                      ),
+                ? const Center(child: CircularProgressIndicator())
+                : profileVM.otherUserWalkRecords.isEmpty
+                ? const Center(child: Text(
+                "아직 산책 기록이 없습니다.", style: TextStyle(color: Colors.grey)))
+                : GridView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: profileVM.otherUserWalkRecords.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+              ),
+              itemBuilder: (context, index) {
+                final walk = profileVM.otherUserWalkRecords[index];
+                final photoUrl = walk.photoUrls.isNotEmpty
+                    ? walk.photoUrls[0]
+                    : null;
+                return GestureDetector(
+                  onTap: () => _showWalkDetail(context, walk),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [BoxShadow(
+                          color: Colors.black.withOpacity(0.05), blurRadius: 5)
+                      ],
+                    ),
+                    child: photoUrl != null
+                        ? ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(photoUrl, fit: BoxFit.cover),
+                    )
+                        : const Icon(Icons.directions_walk, color: Colors.grey),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -378,7 +402,8 @@ class _OtherUserProfileViewState extends State<OtherUserProfileView> {
           Text(
             message,
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey[500], fontSize: 16, height: 1.5),
+            style: TextStyle(
+                color: Colors.grey[500], fontSize: 16, height: 1.5),
           ),
         ],
       ),
@@ -388,154 +413,302 @@ class _OtherUserProfileViewState extends State<OtherUserProfileView> {
   void _showWalkDetail(BuildContext context, WalkRecordModel walk) {
     final dateStr = DateFormat('yyyy년 MM월 d일').format(walk.startTime.toDate());
     final timeStr = DateFormat('HH:mm').format(walk.startTime.toDate());
+    final timeEnd = DateFormat('HH:mm').format(walk.endTime.toDate());
 
     // 시, 분, 초 계산
     final hours = walk.duration ~/ 3600;
     final minutes = (walk.duration % 3600) ~/ 60;
     final seconds = walk.duration % 60;
 
-    final durationText = hours > 0 
-        ? "${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}"
-        : "${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}";
-    
+    final durationText = hours > 0
+        ? "${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(
+        2, '0')}:${seconds.toString().padLeft(2, '0')}"
+        : "${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(
+        2, '0')}";
+
     final durationUnit = hours > 0 ? "시:분:초" : "분:초";
+
+    // 내 닉네임 가져오기 (알림용)
+    final myProfile = context.read<AuthViewModel>().userModel;
+    final myUid = FirebaseAuth.instance.currentUser?.uid;
 
     showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(30),
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // 헤더
-                Container(
-                  padding: const EdgeInsets.fromLTRB(25, 20, 15, 10),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(dateStr, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
-                          Text("$timeStr 산책 완료 ✨", style: const TextStyle(fontSize: 14, color: Color(0xFF4CAF50), fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                      IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close, color: Colors.grey)),
-                    ],
-                  ),
-                ),
+      builder: (ctx) {
+        // 다이얼로그 내부에서 사진 인덱스 상태를 관리하기 위한 변수
+        int currentImageIndex = 0;
 
-                // 이미지
-                if (walk.photoUrls.isNotEmpty)
-                  Container(
-                    height: 280,
-                    margin: const EdgeInsets.symmetric(horizontal: 20),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: PageView.builder(
-                        itemCount: walk.photoUrls.length,
-                        itemBuilder: (context, index) => Image.network(walk.photoUrls[index], fit: BoxFit.cover),
+        // StatefulBuilder를 사용하여 다이얼로그 내부의 상태(인디케이터)만 갱신합니다.
+        return StatefulBuilder(
+            builder: (context, setStateInsideDialog) {
+              return Dialog(
+                  backgroundColor: Colors.transparent,
+                  child: Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // 헤더
+                          Container(
+                            padding: const EdgeInsets.fromLTRB(25, 20, 15, 10),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(dateStr, style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF2C3E50))),
+                                    Text("$timeStr ~ $timeEnd 산책 완료 ✨",
+                                        style: const TextStyle(fontSize: 14,
+                                            color: Color(0xFF4CAF50),
+                                            fontWeight: FontWeight.w600)),
+                                  ],
+                                ),
+                                IconButton(onPressed: () => Navigator.pop(ctx),
+                                    icon: const Icon(
+                                        Icons.close, color: Colors.grey)),
+                              ],
+                            ),
+                          ),
+
+                          // 이미지
+                          if (walk.photoUrls.isNotEmpty)
+                          // [수정] 컬럼으로 감싸서 인디케이터를 아래에 배치
+                            Column(
+                              children: [
+                                Container(
+                                  height: 280,
+                                  margin: const EdgeInsets.symmetric(
+                                      horizontal: 20),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: PageView.builder(
+                                      itemCount: walk.photoUrls.length,
+                                      // [추가] 페이지 변경 시 인덱스 업데이트
+                                      onPageChanged: (index) {
+                                        setStateInsideDialog(() {
+                                          currentImageIndex = index;
+                                        });
+                                      },
+                                      itemBuilder: (context, index) =>
+                                          Image.network(walk.photoUrls[index],
+                                              fit: BoxFit.cover),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                // [추가] 기능 2: 인디케이터 표시
+                                _buildIndicator(
+                                    walk.photoUrls.length, currentImageIndex),
+                              ],
+                            )
+                          else
+                            Container(
+                              height: 180,
+                              margin: const EdgeInsets.symmetric(
+                                  horizontal: 20),
+                              decoration: BoxDecoration(
+                                  color: const Color(0xFFFFF9C4).withOpacity(
+                                      0.5),
+                                  borderRadius: BorderRadius.circular(20)),
+                              child: const Icon(Icons.pets, size: 60,
+                                  color: Color(0xFFFFC107)),
+                            ),
+
+                          // 함께한 펫 (태그)
+                          // Note: OtherUserProfileView에서는 상대방의 펫 정보 리스트를 직접 가지고 있지 않으므로
+                          // 간단하게 아이콘과 텍스트로 대체하거나 추후 보강 가능
+                          if (walk.petIds.isNotEmpty)
+                          // 인디케이터가 생겨서 상단 패딩 약간 조정 (15 -> 10)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 10, 20, 5),
+                              child: Wrap(
+                                spacing: 8,
+                                children: walk.petIds.map((id) =>
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                          color: const Color(0xFFE8F5E9),
+                                          borderRadius: BorderRadius.circular(
+                                              15)),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: const [
+                                          Icon(Icons.pets, size: 14,
+                                              color: Color(0xFF2E7D32)),
+                                          SizedBox(width: 6),
+                                          Text("함께한 친구", style: TextStyle(
+                                              fontSize: 12,
+                                              color: Color(0xFF2E7D32),
+                                              fontWeight: FontWeight.bold)),
+                                        ],
+                                      ),
+                                    )).toList(),
+                              ),
+                            ),
+
+                          // 데이터 카드
+                          Container(
+                            margin: const EdgeInsets.all(20),
+                            padding: const EdgeInsets.symmetric(vertical: 20),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF8E1),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                  color: const Color(0xFFFFD54F).withOpacity(
+                                      0.5)),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: [
+                                _buildLuxStatItem(Icons.straighten_rounded,
+                                    "${walk.distance.toStringAsFixed(2)}", "km",
+                                    const Color(0xFF4CAF50)),
+                                _buildLuxStatItem(
+                                    Icons.access_time_rounded, durationText,
+                                    durationUnit, const Color(0xFFFF9800)),
+                                _buildLuxStatItem(
+                                    Icons.local_fire_department_rounded,
+                                    "${walk.calories.toInt()}", "kcal",
+                                    const Color(0xFFE53935)),
+                              ],
+                            ),
+                          ),
+
+                          // 기록 한 줄 + 좋아요 버튼 영역
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(25, 10, 25, 25),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(walk.emoji.isNotEmpty ? walk.emoji : "🐕", style: const TextStyle(fontSize: 24)),
+                                    const SizedBox(width: 10),
+                                    const Text("기록 한 줄", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF34495E))),
+                                    const Spacer(),
+
+                                    // 좋아요 버튼 (StreamBuilder로 실시간 상태 확인)
+                                    StreamBuilder<DocumentSnapshot>(
+                                      stream: FirebaseFirestore.instance
+                                          .collection('walks')
+                                          .doc(walk.id)
+                                          .collection('likes')
+                                          .doc(myUid)
+                                          .snapshots(),
+                                      builder: (context, snapshot) {
+                                        final isLiked = snapshot.hasData &&
+                                            snapshot.data!.exists;
+                                        return IconButton(
+                                          onPressed: () async {
+                                            await context.read<
+                                                SocialViewModel>().toggleLike(
+                                              walkId: walk.id ?? "",
+                                              ownerId: walk.userId,
+                                              myNickname: myProfile?.nickname ??
+                                                  "익명",
+                                            );
+                                            if (context.mounted) {
+                                              ScaffoldMessenger
+                                                  .of(context)
+                                                  .showSnackBar(
+                                                SnackBar(
+                                                  content: Text(isLiked
+                                                      ? "좋아요를 취소했습니다."
+                                                      : "이 기록을 좋아합니다! ❤️"),
+                                                  duration: const Duration(
+                                                      seconds: 1),
+                                                ),
+                                              );
+                                            }
+                                          },
+                                          icon: Icon(
+                                            isLiked ? Icons.favorite : Icons
+                                                .favorite_border,
+                                            color: isLiked ? Colors.red : Colors
+                                                .grey,
+                                            size: 28,
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  walk.memo.isNotEmpty
+                                      ? walk.memo
+                                      : "산책 기록이 없습니다.",
+                                  style: const TextStyle(fontSize: 15,
+                                      height: 1.6,
+                                      color: Color(0xFF5D6D7E)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  )
-                else
-                  Container(
-                    height: 180,
-                    margin: const EdgeInsets.symmetric(horizontal: 20),
-                    decoration: BoxDecoration(color: const Color(0xFFFFF9C4).withOpacity(0.5), borderRadius: BorderRadius.circular(20)),
-                    child: const Icon(Icons.pets, size: 60, color: Color(0xFFFFC107)),
-                  ),
-
-                // 함께한 펫 (태그)
-                // Note: OtherUserProfileView에서는 상대방의 펫 정보 리스트를 직접 가지고 있지 않으므로 
-                // 간단하게 아이콘과 텍스트로 대체하거나 추후 보강 가능
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 15, 20, 5),
-                  child: Wrap(
-                    spacing: 8,
-                    children: walk.petIds.map((id) => Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(15)),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Icon(Icons.pets, size: 14, color: Color(0xFF2E7D32)),
-                          SizedBox(width: 6),
-                          Text("함께한 친구", style: TextStyle(fontSize: 12, color: Color(0xFF2E7D32), fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    )).toList(),
-                  ),
-                ),
-
-                // 데이터 카드
-                Container(
-                  margin: const EdgeInsets.all(20),
-                  padding: const EdgeInsets.symmetric(vertical: 20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF8E1), 
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFFFD54F).withOpacity(0.5)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildLuxStatItem(Icons.straighten_rounded, "${walk.distance.toStringAsFixed(2)}", "km", const Color(0xFF4CAF50)),
-                      _buildLuxStatItem(Icons.access_time_rounded, durationText, durationUnit, const Color(0xFFFF9800)),
-                      _buildLuxStatItem(Icons.local_fire_department_rounded, "${walk.calories.toInt()}", "kcal", const Color(0xFFE53935)),
-                    ],
-                  ),
-                ),
-
-                // 후기
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(25, 0, 25, 25),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(walk.emoji.isNotEmpty ? walk.emoji : "🐕", style: const TextStyle(fontSize: 24)),
-                          const SizedBox(width: 10),
-                          const Text("기록 한 줄", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF34495E))),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        walk.memo.isNotEmpty ? walk.memo : "산책 기록이 없습니다.",
-                        style: const TextStyle(fontSize: 15, height: 1.6, color: Color(0xFF5D6D7E)),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+                  ));
+            }
+        );
+      },
     );
   }
 
-  Widget _buildLuxStatItem(IconData icon, String value, String unit, Color color) {
+  // [추가] 기능 2: 인디케이터 빌드 메서드 (제공해주신 코드 수정)
+  Widget _buildIndicator(int totalCount, int currentIndex) {
+    // 사진이 1장 이하일 때는 인디케이터를 표시하지 않음
+    if (totalCount <= 1) return const SizedBox.shrink();
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(totalCount, (index) {
+        bool isSelected = index == currentIndex;
+
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          width: isSelected ? 16 : 8,
+          // 선택되면 약간 넓어지는 효과
+          height: 8,
+          decoration: BoxDecoration(
+            // 앱 테마색(초록색) 적용, 선택 안된건 회색
+            color: isSelected ? const Color(0xFF4CAF50) : Colors.grey.shade300,
+            borderRadius: BorderRadius.circular(4), // 동그라미 대신 둥근 사각형 형태로 변경 (취향에 따라 BoxShape.circle로 변경 가능)
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildLuxStatItem(IconData icon, String value, String unit,
+      Color color) {
     return Column(
       children: [
         Container(
           padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+          decoration: BoxDecoration(
+              color: color.withOpacity(0.1), shape: BoxShape.circle),
           child: Icon(icon, color: color, size: 22),
         ),
         const SizedBox(height: 8),
-        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
-        Text(unit, style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600)),
+        Text(value, style: const TextStyle(fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF2C3E50))),
+        Text(unit, style: const TextStyle(
+            fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600)),
       ],
     );
   }
@@ -543,26 +716,29 @@ class _OtherUserProfileViewState extends State<OtherUserProfileView> {
   void _showBlockDialog(BuildContext context, SocialViewModel vm) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("사용자 차단"),
-        content: Text("${widget.user.nickname}님을 차단하시겠습니까?\n차단하면 검색 결과에 나타나지 않으며 팔로우가 해제됩니다."),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("취소")),
-          TextButton(
-            onPressed: () async {
-              await vm.toggleBlock(widget.user.uid);
-              if (context.mounted) {
-                Navigator.pop(ctx);
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("차단되었습니다.")),
-                );
-              }
-            },
-            child: const Text("차단", style: TextStyle(color: Colors.red)),
+      builder: (ctx) =>
+          AlertDialog(
+            title: const Text("사용자 차단"),
+            content: Text("${widget.user
+                .nickname}님을 차단하시겠습니까?\n차단하면 검색 결과에 나타나지 않으며 팔로우가 해제됩니다."),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx), child: const Text("취소")),
+              TextButton(
+                onPressed: () async {
+                  await vm.toggleBlock(widget.user.uid);
+                  if (context.mounted) {
+                    Navigator.pop(ctx);
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("차단되었습니다.")),
+                    );
+                  }
+                },
+                child: const Text("차단", style: TextStyle(color: Colors.red)),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 }
@@ -590,36 +766,41 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("차단된 계정", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text("차단된 계정",
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF4CAF50),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: socialVM.isLoading
           ? const Center(child: CircularProgressIndicator())
           : socialVM.blockedUserList.isEmpty
-              ? const Center(child: Text("차단된 계정이 없습니다.", style: TextStyle(color: Colors.grey)))
-              : ListView.builder(
-                  itemCount: socialVM.blockedUserList.length,
-                  itemBuilder: (context, index) {
-                    final user = socialVM.blockedUserList[index];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundImage: (user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty)
-                            ? NetworkImage(user.profileImageUrl!)
-                            : null,
-                        child: (user.profileImageUrl == null || user.profileImageUrl!.isEmpty)
-                            ? const Icon(Icons.person)
-                            : null,
-                      ),
-                      title: Text(user.nickname, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      trailing: OutlinedButton(
-                        onPressed: () => socialVM.unblockUser(user.uid),
-                        style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-                        child: const Text("차단 해제"),
-                      ),
-                    );
-                  },
-                ),
+          ? const Center(
+          child: Text("차단된 계정이 없습니다.", style: TextStyle(color: Colors.grey)))
+          : ListView.builder(
+        itemCount: socialVM.blockedUserList.length,
+        itemBuilder: (context, index) {
+          final user = socialVM.blockedUserList[index];
+          return ListTile(
+            leading: CircleAvatar(
+              backgroundImage: (user.profileImageUrl != null &&
+                  user.profileImageUrl!.isNotEmpty)
+                  ? NetworkImage(user.profileImageUrl!)
+                  : null,
+              child: (user.profileImageUrl == null ||
+                  user.profileImageUrl!.isEmpty)
+                  ? const Icon(Icons.person)
+                  : null,
+            ),
+            title: Text(user.nickname,
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            trailing: OutlinedButton(
+              onPressed: () => socialVM.unblockUser(user.uid),
+              style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text("차단 해제"),
+            ),
+          );
+        },
+      ),
     );
   }
 }
