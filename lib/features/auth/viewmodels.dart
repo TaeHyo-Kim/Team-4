@@ -106,7 +106,7 @@ class AuthViewModel with ChangeNotifier {
         uid: uid,
         email: email,
         nickname: nickname,
-        isLocationPublic: true,
+        visibility: 'all', // [수정] 모델 필드명 변경 반영
         createdAt: DateTime.now(),
         stats: UserStats(),
       );

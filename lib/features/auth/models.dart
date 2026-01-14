@@ -1,18 +1,17 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-//원복
 // 유저 통계
 class UserStats {
   final double totalWalkDistance;
   final int followerCount;
   final int followingCount;
-  final int postCount; // [추가] 게시물 수
+  final int postCount;
 
   UserStats({
     this.totalWalkDistance = 0.0,
     this.followerCount = 0,
     this.followingCount = 0,
-    this.postCount = 0, // [추가] 기본값 0
+    this.postCount = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -20,7 +19,7 @@ class UserStats {
       'totalWalkDistance': totalWalkDistance,
       'followerCount': followerCount,
       'followingCount': followingCount,
-      'postCount': postCount, // [추가]
+      'postCount': postCount,
     };
   }
 
@@ -29,20 +28,20 @@ class UserStats {
       totalWalkDistance: (map['totalWalkDistance'] ?? 0).toDouble(),
       followerCount: map['followerCount'] ?? 0,
       followingCount: map['followingCount'] ?? 0,
-      postCount: map['postCount'] ?? 0, // [추가]
+      postCount: map['postCount'] ?? 0,
     );
   }
 }
 
-// 유저 모델 (필드 보완 완료)
+// 유저 모델
 class UserModel {
   final String uid;
   final String email;
   final String nickname;
-  final String? bio;                // [추가] 자기소개
-  final String? profileImageUrl;    // [추가] 프로필 이미지
-  final bool isLocationPublic;      // [추가] 위치 공개 여부
-  final Map<String, dynamic>? position; // [추가] GeoFlutterFire 위치 데이터
+  final String? bio;
+  final String? profileImageUrl;
+  final String visibility; // [수정] bool에서 String으로 변경 ('all', 'friends', 'none')
+  final Map<String, dynamic>? position;
   final UserStats stats;
   final DateTime createdAt;
 
@@ -52,7 +51,7 @@ class UserModel {
     required this.nickname,
     this.bio,
     this.profileImageUrl,
-    this.isLocationPublic = false, // 기본값은 비공개 권장
+    this.visibility = 'all', // 기본값 '모두 허용'
     this.position,
     required this.stats,
     required this.createdAt,
@@ -64,8 +63,8 @@ class UserModel {
       'nickname': nickname,
       'bio': bio,
       'profileImageUrl': profileImageUrl,
-      'isLocationPublic': isLocationPublic,
-      'position': position, // 위치 정보 업데이트 시 사용
+      'visibility': visibility,
+      'position': position,
       'stats': stats.toMap(),
       'createdAt': Timestamp.fromDate(createdAt),
     };
@@ -79,8 +78,8 @@ class UserModel {
       nickname: data['nickname'] ?? '알 수 없음',
       bio: data['bio'],
       profileImageUrl: data['profileImageUrl'],
-      isLocationPublic: data['isLocationPublic'] ?? false,
-      position: data['position'], // GeoPoint와 geohash가 포함된 Map
+      visibility: data['visibility'] ?? 'all',
+      position: data['position'],
       stats: UserStats.fromMap(data['stats'] ?? {}),
       createdAt: (data['createdAt'] as Timestamp).toDate(),
     );

@@ -66,11 +66,13 @@ class _ProfileViewState extends State<ProfileView> {
         : profileVM.walkRecords.where((walk) => walk.petIds.contains(_selectedPetId)).toList();
 
     return Scaffold(
-      backgroundColor: Colors.white, // 배경을 하얀색으로 변경
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text("내 프로필", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
         backgroundColor: const Color(0xFF4CAF50), 
         elevation: 0,
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white),
@@ -88,22 +90,18 @@ class _ProfileViewState extends State<ProfileView> {
           children: [
             // 1. 유저 프로필 상단
             Container(
-              padding: const EdgeInsets.fromLTRB(20, 25, 20, 20),
-              decoration: const BoxDecoration(
-                color: Color(0xFF4CAF50),
-                borderRadius: BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
-              ),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
+              color: Colors.white,
               child: Row(
                 children: [
                   Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 3),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)],
+                      border: Border.all(color: const Color(0xFFE8F5E9), width: 3),
                     ),
                     child: CircleAvatar(
                       radius: 42,
-                      backgroundColor: Colors.white,
+                      backgroundColor: Colors.grey[100],
                       backgroundImage: (user?.profileImageUrl != null && user!.profileImageUrl!.isNotEmpty)
                           ? NetworkImage(user.profileImageUrl!) : null,
                       child: (user?.profileImageUrl == null || user!.profileImageUrl!.isEmpty)
@@ -116,17 +114,19 @@ class _ProfileViewState extends State<ProfileView> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(user?.nickname ?? "익명 유저", 
-                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
-                        const SizedBox(height: 4),
-                        Text(user?.bio ?? "행복한 반려생활 중 🐾", 
-                          style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 13)),
+                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
+                        if (user?.bio != null && user!.bio!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(user.bio!, 
+                            style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                        ],
                         const SizedBox(height: 12),
                         UserStatsRow(
                           userId: user?.uid ?? "",
                           postCount: profileVM.walkRecords.length,
                           followingCount: user?.stats.followingCount ?? 0,
                           followerCount: user?.stats.followerCount ?? 0,
-                          textColor: Colors.white,
+                          textColor: const Color(0xFF2C3E50),
                         ),
                       ],
                     ),
@@ -137,29 +137,26 @@ class _ProfileViewState extends State<ProfileView> {
 
             // 2. 프로필 편집 버튼
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileEditView())),
-                      icon: const Icon(Icons.edit_note, size: 20),
-                      label: const Text("프로필 편집", style: TextStyle(fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFF9800), 
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        elevation: 2,
-                      ),
-                    ),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileEditView())),
+                  icon: const Icon(Icons.edit_note, size: 20),
+                  label: const Text("프로필 편집", style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF4CAF50),
+                    side: const BorderSide(color: Color(0xFF4CAF50)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
-                ],
+                ),
               ),
             ),
 
             // 3. 반려동물 목록
             if (petVM.pets.isNotEmpty) ...[
+              const SizedBox(height: 20),
               Container(
                 height: 110,
                 padding: const EdgeInsets.symmetric(vertical: 5),
@@ -181,8 +178,10 @@ class _ProfileViewState extends State<ProfileView> {
                               padding: const EdgeInsets.all(3),
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                gradient: isSelected ? const LinearGradient(colors: [Color(0xFF4CAF50), Color(0xFFFFEB3B)]) : null,
-                                border: isSelected ? null : Border.all(color: Colors.grey[300]!, width: 1.5),
+                                border: Border.all(
+                                  color: isSelected ? const Color(0xFF4CAF50) : Colors.grey[200]!, 
+                                  width: 2
+                                ),
                               ),
                               child: CircleAvatar(
                                 radius: 28,
@@ -206,7 +205,7 @@ class _ProfileViewState extends State<ProfileView> {
               ),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20),
-                child: Divider(thickness: 1, height: 1),
+                child: Divider(thickness: 0.5, height: 1),
               ),
             ],
 
@@ -230,9 +229,8 @@ class _ProfileViewState extends State<ProfileView> {
                           onTap: () => _showWalkDetail(context, walk),
                           child: Container(
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: Colors.grey[50],
                               borderRadius: BorderRadius.circular(15),
-                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))],
                               border: Border.all(color: Colors.grey[100]!),
                             ),
                             child: photoUrl != null 
@@ -240,9 +238,9 @@ class _ProfileViewState extends State<ProfileView> {
                               : Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(Icons.directions_walk, color: const Color(0xFF4CAF50).withOpacity(0.5), size: 30),
+                                    Icon(Icons.directions_walk, color: Colors.grey[300], size: 30),
                                     const SizedBox(height: 4),
-                                    Text("${walk.distance.toStringAsFixed(1)}km", style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
+                                    Text("${walk.distance.toStringAsFixed(1)}km", style: TextStyle(fontSize: 10, color: Colors.grey[400], fontWeight: FontWeight.bold)),
                                   ],
                                 ),
                           ),
@@ -263,7 +261,6 @@ class _ProfileViewState extends State<ProfileView> {
     final dateStr = DateFormat('yyyy년 MM월 d일').format(walk.startTime.toDate());
     final timeStr = DateFormat('HH:mm').format(walk.startTime.toDate());
 
-    // 시, 분, 초 계산
     final hours = walk.duration ~/ 3600;
     final minutes = (walk.duration % 3600) ~/ 60;
     final seconds = walk.duration % 60;
@@ -379,7 +376,7 @@ class _ProfileViewState extends State<ProfileView> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        walk.memo.isNotEmpty ? walk.memo : "오늘도 즐거운 산책이었어요!",
+                        walk.memo.isNotEmpty ? walk.memo : "산책 기록이 없습니다.",
                         style: const TextStyle(fontSize: 15, height: 1.6, color: Color(0xFF5D6D7E)),
                       ),
                     ],
@@ -485,9 +482,9 @@ class _ProfileEditViewState extends State<ProfileEditView> {
   }
 
   Future<void> _pickImage() async {
-    final photosStatus = await _permissionService.getPhotosPermissionStatus();
+    final ph.PermissionStatus photosStatus = await _permissionService.getPhotosPermissionStatus();
     if (photosStatus != ph.PermissionStatus.granted) {
-      final granted = await _permissionService.requestPhotosPermission();
+      final bool granted = await _permissionService.requestPhotosPermission();
       if (!granted) return;
     }
     final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
@@ -500,9 +497,11 @@ class _ProfileEditViewState extends State<ProfileEditView> {
     final user = context.watch<AuthViewModel>().userModel;
     return Scaffold(
       appBar: AppBar(
-        title: const Text("프로필 수정", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), 
-        backgroundColor: const Color(0xFF4CAF50), 
-        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text("프로필 수정", style: TextStyle(color: Color(0xFF2C3E50), fontWeight: FontWeight.bold)), 
+        backgroundColor: Colors.white, 
+        elevation: 0,
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: Color(0xFF2C3E50)),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(30),
@@ -531,7 +530,7 @@ class _ProfileEditViewState extends State<ProfileEditView> {
           const SizedBox(height: 40),
           _buildInput("닉네임", _nickCtrl),
           const SizedBox(height: 20),
-          _buildInput("한줄소개", _bioCtrl),
+          _buildInput("소개", _bioCtrl),
           const SizedBox(height: 60),
           SizedBox(
             width: double.infinity, 
@@ -543,8 +542,8 @@ class _ProfileEditViewState extends State<ProfileEditView> {
               }, 
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF4CAF50),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                elevation: 3,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 0,
               ), 
               child: vm.isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("변경 내용 저장", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
             ),
@@ -561,8 +560,9 @@ class _ProfileEditViewState extends State<ProfileEditView> {
       TextField(
         controller: ctrl, 
         decoration: InputDecoration(
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Color(0xFF4CAF50), width: 2)),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[200]!)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[200]!)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF4CAF50), width: 2)),
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
           fillColor: Colors.grey[50],
           filled: true,
@@ -602,15 +602,16 @@ class _FollowListScreenState extends State<FollowListScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(widget.isFollowingList ? "팔로잉" : "팔로워", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF4CAF50), 
+        title: Text(widget.isFollowingList ? "팔로잉" : "팔로워", style: const TextStyle(color: Color(0xFF2C3E50), fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white, 
         elevation: 0, 
-        iconTheme: const IconThemeData(color: Colors.white),
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: Color(0xFF2C3E50)),
       ),
       body: profileVM.isLoading
           ? const Center(child: CircularProgressIndicator())
           : users.isEmpty
-              ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(widget.isFollowingList ? Icons.person_outline : Icons.people_outline, size: 64, color: Colors.grey[400]), const SizedBox(height: 16), Text(widget.isFollowingList ? "팔로잉한 사용자가 없습니다." : "팔로워가 없습니다.", style: TextStyle(color: Colors.grey[600], fontSize: 16))]))
+              ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(widget.isFollowingList ? Icons.person_outline : Icons.people_outline, size: 64, color: Colors.grey[200]), const SizedBox(height: 16), Text(widget.isFollowingList ? "팔로잉한 사용자가 없습니다." : "팔로워가 없습니다.", style: TextStyle(color: Colors.grey[400], fontSize: 16))]))
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   itemCount: users.length,
@@ -619,9 +620,11 @@ class _FollowListScreenState extends State<FollowListScreen> {
                     final isMe = user.uid == myUid;
                     return ListTile(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                      leading: CircleAvatar(radius: 28, backgroundColor: Colors.grey[300], backgroundImage: (user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty) ? NetworkImage(user.profileImageUrl!) : null, child: (user.profileImageUrl == null || user.profileImageUrl!.isEmpty) ? const Icon(Icons.person, color: Colors.white) : null),
-                      title: Text(user.nickname, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      subtitle: Text(user.bio ?? "함께 산책해요!", maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                      leading: CircleAvatar(radius: 28, backgroundColor: Colors.grey[100], backgroundImage: (user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty) ? NetworkImage(user.profileImageUrl!) : null, child: (user.profileImageUrl == null || user.profileImageUrl!.isEmpty) ? const Icon(Icons.person, color: Color(0xFF4CAF50)) : null),
+                      title: Text(user.nickname, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF2C3E50))),
+                      subtitle: (user.bio != null && user.bio!.isNotEmpty) 
+                          ? Text(user.bio!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.grey[600], fontSize: 13))
+                          : null,
                       trailing: isMe ? null : ElevatedButton(
                         onPressed: () async { 
                           await socialVM.toggleFollow(user.uid); 
@@ -629,10 +632,10 @@ class _FollowListScreenState extends State<FollowListScreen> {
                           widget.isFollowingList ? await profileVM.fetchFollowingUsers(widget.userId) : await profileVM.fetchFollowerUsers(widget.userId); 
                         }, 
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: socialVM.isFollowing(user.uid) ? Colors.grey[200] : const Color(0xFFFF9800), 
-                          foregroundColor: socialVM.isFollowing(user.uid) ? Colors.black87 : Colors.white, 
+                          backgroundColor: socialVM.isFollowing(user.uid) ? Colors.grey[100] : const Color(0xFFFF9800), 
+                          foregroundColor: socialVM.isFollowing(user.uid) ? Colors.grey[600] : Colors.white, 
                           elevation: 0, 
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), 
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), 
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8)
                         ), 
                         child: Text(socialVM.isFollowing(user.uid) ? "팔로잉" : "팔로우", style: const TextStyle(fontWeight: FontWeight.bold))
