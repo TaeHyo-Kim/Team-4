@@ -34,6 +34,13 @@ class _WalkScreenState extends State<WalkScreen> {
       appBar: AppBar(
         key: const ValueKey('walk_appbar'),
         backgroundColor: const Color(0xFF4CAF50),
+        // [추가] 산책 중/요약/후기 단계에서만 취소 버튼 표시
+        leading: vm.walkState != 0
+            ? IconButton(
+          icon: const Icon(Icons.close, color: Colors.red, size: 28),
+          onPressed: () => _showExitConfirmationDialog(context, vm),
+        )
+            : null,
         title: const Text(
           "산책",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
@@ -43,6 +50,27 @@ class _WalkScreenState extends State<WalkScreen> {
         onPointerDown: (_) => vm.onUserInteractionStarted(),
         onPointerUp: (_) => vm.onUserInteractionEnded(),
         child: _buildBodyByState(vm),
+      ),
+    );
+  }
+
+  // [추가] 산책 중단 확인 팝업
+  void _showExitConfirmationDialog(BuildContext context, WalkViewModel vm) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("산책 중단"),
+        content: const Text("산책을 그만두시겠습니까?\n기록이 저장되지 않습니다."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("아니요")),
+          TextButton(
+            onPressed: () {
+              vm.cancelWalk(); // ViewModel에 정의한 초기화 로직 호출
+              Navigator.pop(ctx);
+            },
+            child: const Text("예", style: TextStyle(color: Colors.red)),
+          ),
+        ],
       ),
     );
   }
@@ -502,20 +530,16 @@ class _WalkScreenState extends State<WalkScreen> {
               ),
               const SizedBox(width: 20),
               ElevatedButton(
-                onPressed: vm.isSaving ? null : () async { // [수정] 저장 중일 때 버튼 비활성화
-                  try {
-                    await vm.stopWalkAndSave(vm.reviewController.text);
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("후기가 등록되었습니다!")),
-                      );
-                    }
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("등록 실패: $e"), backgroundColor: Colors.red),
-                      );
-                    }
+                onPressed: vm.isSaving ? null : () {
+                  // 1. 키보드 닫기
+                  FocusScope.of(context).unfocus();
+
+                  // 2. 산책 거리가 0인지 먼저 체크
+                  if (vm.distance == 0) {
+                    _showZeroDistanceConfirmDialog(context, vm);
+                  } else {
+                    // 거리가 있으면 즉시 저장 로직 실행
+                    _handleSave(context, vm);
                   }
                 },
                 style: ElevatedButton.styleFrom(
@@ -529,13 +553,58 @@ class _WalkScreenState extends State<WalkScreen> {
                     child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
                 )
                     : const Text("확인", style: TextStyle(color: Colors.white, fontSize: 18)),
-              )
+              ),
             ],
           ),
           const SizedBox(height: 40),
         ],
       ),
     );
+  }
+
+// [수정/확인] 거리 0일 때 확인 팝업
+  void _showZeroDistanceConfirmDialog(BuildContext context, WalkViewModel vm) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("알림"),
+        content: const Text("산책한 거리가 없습니다.\n그래도 등록하시겠습니까?"),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("아니요")
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx); // 팝업 닫기
+              _handleSave(context, vm); // "예"를 눌렀을 때만 저장 실행
+            },
+            child: const Text("예"),
+          ),
+        ],
+      ),
+    );
+  }
+
+// [수정/확인] 실제 저장 로직 처리 함수
+  Future<void> _handleSave(BuildContext context, WalkViewModel vm) async {
+    try {
+      // ViewModel의 저장 함수 호출
+      await vm.stopWalkAndSave(vm.reviewController.text);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("후기가 등록되었습니다!")),
+        );
+        // 저장 성공 후 필요한 페이지 이동 로직이 있다면 여기에 추가 (예: 홈으로 가기)
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("등록 실패: $e"), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   // 인디케이터를 생성하는 별도의 메서드

@@ -11,6 +11,9 @@ import '../profile/viewmodels.dart';
 import '../walk/models.dart';
 import '../pet/viewmodels.dart';
 import '../auth/viewmodels.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
+import 'dart:async';
 
 class SocialScreen extends StatefulWidget {
   const SocialScreen({super.key});
@@ -21,24 +24,81 @@ class SocialScreen extends StatefulWidget {
 
 class _SocialScreenState extends State<SocialScreen> {
   final _searchCtrl = TextEditingController();
+  final FocusNode _searchFocus = FocusNode(); // 검색창 포커스 감지용
+  GoogleMapController? _mapController;
+  bool _isFocused = false;
+  UserModel? _selectedUser; // 마커 클릭 시 선택된 유저 정보 저장
+  Timer? _mapInactivityTimer;      // 지도 비활성 타이머 관련 에러 해결
+  bool _isUserInteracting = false; // 사용자 상호작용 감지 에러 해결
+  bool _isSearchBarFocused = false; // 87번 라인 _isSearchBarFocused 에러 해결
 
   @override
   void initState() {
     super.initState();
+    _searchFocus.addListener(_onSearchFocusChange);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<SocialViewModel>().fetchUsers();
+    });
+  }
+
+  // [추가] image_6b6b84.png 34번 라인에서 참조하는 메서드 정의
+  void _onSearchFocusChange() {
+    setState(() {
+      _isSearchBarFocused = _searchFocus.hasFocus;
+    });
+  }
+
+  // [추가] image_6b6b84.png 46~63번 라인 관련 상호작용 로직 (에러 해결용)
+  void _onInteractionStarted() {
+    setState(() {
+      _isUserInteracting = true;
+      _mapInactivityTimer?.cancel();
     });
   }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _searchFocus.dispose();
+    _mapInactivityTimer?.cancel(); // [추가] 타이머 해제
     super.dispose();
+  }
+
+// [추가] 조작 종료 후 5초 대기 후 중심 이동
+  void _onInteractionEnded() {
+    _mapInactivityTimer?.cancel();_mapInactivityTimer = Timer(const Duration(seconds: 5), () async {
+      if (mounted && !_isUserInteracting) {
+        setState(() {
+          _isUserInteracting = false;
+        });
+        // [추가] 요구사항에 따라 내 위치로 카메라 이동
+        await _moveToMyLocation();
+      }
+    });
+  }
+
+// [추가] 지도를 내 현재 위치로 이동
+  Future<void> _moveToMyLocation() async {
+    if (_mapController == null) return;
+    try {
+      Position pos = await Geolocator.getCurrentPosition();
+      await _mapController!.animateCamera(
+          CameraUpdate.newLatLng(LatLng(pos.latitude, pos.longitude))
+      );
+    } catch (e) {
+      debugPrint("지도 중심 이동 실패: $e");
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+
+    bool isListMode = _isSearchBarFocused || _searchCtrl.text.isNotEmpty;
     final socialVM = context.watch<SocialViewModel>();
+    // 검색 중이거나 검색창에 포커스가 있는 경우 리스트 모드
+    bool showListMode = _isFocused || _searchCtrl.text.isNotEmpty;
+    bool showMap = !_isSearchBarFocused && _searchCtrl.text.isEmpty;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -53,62 +113,150 @@ class _SocialScreenState extends State<SocialScreen> {
       ),
       body: Column(
         children: [
+          // 검색창 영역
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: TextField(
               controller: _searchCtrl,
+              focusNode: _searchFocus,
               decoration: InputDecoration(
                 hintText: "닉네임 검색",
                 prefixIcon: const Icon(Icons.search, color: Color(0xFF4CAF50)),
                 filled: true,
                 fillColor: Colors.grey[100],
-                contentPadding: const EdgeInsets.symmetric(
-                    vertical: 0, horizontal: 16),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(30),
-                  borderSide: BorderSide.none,
-                ),
-                suffixIcon: _searchCtrl.text.isNotEmpty
+                    borderRadius: BorderRadius.circular(30),
+                    borderSide: BorderSide.none),
+                suffixIcon: _searchCtrl.text.isNotEmpty || _isFocused
                     ? IconButton(
                   icon: const Icon(Icons.clear),
                   onPressed: () {
                     _searchCtrl.clear();
+                    _searchFocus.unfocus();
                     context.read<SocialViewModel>().searchUsers('');
-                    FocusScope.of(context).unfocus();
                   },
                 )
                     : null,
               ),
-              onChanged: (val) {
-                context.read<SocialViewModel>().searchUsers(val);
-                setState(() {});
-              },
+              onChanged: (val) =>
+                  context.read<SocialViewModel>().searchUsers(val),
             ),
           ),
           Expanded(
-            child: socialVM.isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : socialVM.users.isEmpty
-                ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Icon(Icons.person_off, size: 48, color: Colors.grey),
-                  SizedBox(height: 10),
-                  Text("검색 결과가 없습니다.", style: TextStyle(color: Colors.grey)),
-                ],
-              ),
-            )
-                : ListView.builder(
-              itemCount: socialVM.users.length,
-              itemBuilder: (context, index) {
-                final user = socialVM.users[index];
-                return _buildUserTile(context, user, socialVM);
-              },
+            child: isListMode
+                ? _buildUserList(socialVM)
+                : Listener(
+              onPointerDown: (_) => _onInteractionStarted(),
+              onPointerUp: (_) => _onInteractionEnded(),
+              child: _buildMapView(socialVM),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  // 기능 1: 지도 뷰 (기본 상태)
+  Widget _buildMapView(SocialViewModel vm) {
+    return FutureBuilder<Position>(
+      future: Geolocator.getCurrentPosition(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+
+       final myLatLng = LatLng(snapshot.data!.latitude, snapshot.data!.longitude);
+
+        return Stack(
+          children: [
+            GoogleMap(
+              initialCameraPosition: CameraPosition(target: myLatLng, zoom: 15),
+              onMapCreated: (controller) => _mapController = controller,
+              myLocationEnabled: true,
+              myLocationButtonEnabled: false, // 커스텀 로직이 있으므로 버튼은 숨김
+              circles: {
+                Circle(
+                  circleId: const CircleId("nearby_range"),
+                  center: myLatLng,
+                  radius: 1000, // 1km
+                  fillColor: Colors.blue.withOpacity(0.05),
+                  strokeColor: Colors.blue.withOpacity(0.2),
+                  strokeWidth: 1,
+                ),
+              },
+              // [수정] 커스텀 마커 적용 및 클릭 이벤트
+              markers: vm.nearbyUsers.map((user) {
+                final pos = user.position as GeoPoint?; // 명시적 캐스팅
+                return Marker(
+                  markerId: MarkerId(user.uid),
+                  position: LatLng(pos?.latitude ?? 0.0, pos?.longitude ?? 0.0),
+                  onTap: () {
+                    _onInteractionStarted(); // 마커 클릭 시 자동 이동 일시 중지
+                    setState(() => _selectedUser = user);
+                  },
+                );
+              }).toSet(),
+              onTap: (_) => setState(() => _selectedUser = null), // 빈 화면 터치 시 정보창 닫기
+            ),
+
+            // [추가] 마커 클릭 시 나타나는 정보 상자 (image_6af28c.png 스타일)
+            if (_selectedUser != null)
+              Positioned(
+                bottom: 30, left: 20, right: 20,
+                child: _buildUserMiniCard(_selectedUser!),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  // [추가] 유저 정보 미니 카드 위젯 (이미지 우측 닉네임/소개/버튼 구조)
+  Widget _buildUserMiniCard(UserModel user) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFF9800), // 주황색 배경
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10)],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 30,
+            backgroundImage: (user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty)
+                ? NetworkImage(user.profileImageUrl!) : null,
+            child: (user.profileImageUrl == null || user.profileImageUrl!.isEmpty)
+                ? const Icon(Icons.person) : null,
+          ),
+          const SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(user.nickname, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                Text(user.bio ?? "좋은 하루!", style: const TextStyle(color: Colors.white, fontSize: 14)),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => OtherUserProfileView(user: user))),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+            child: const Text("프로필", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 기능 2: 사용자 리스트 (검색창 클릭/입력 시)
+  Widget _buildUserList(SocialViewModel vm) {
+    if (vm.isLoading) return const Center(child: CircularProgressIndicator());
+    if (vm.users.isEmpty) {
+      return Center(child: Text(_searchCtrl.text.isEmpty ? "팔로우한 사용자가 없습니다." : "검색 결과가 없습니다."));
+    }
+    return ListView.builder(
+      itemCount: vm.users.length,
+      itemBuilder: (context, index) => _buildUserTile(context, vm.users[index], vm),
     );
   }
 
@@ -250,6 +398,7 @@ class _OtherUserProfileViewState extends State<OtherUserProfileView> {
     final profileVM = context.watch<ProfileViewModel>();
     final userToShow = _latestUser ?? widget.user;
     final isFollowing = socialVM.isFollowing(userToShow.uid);
+    // [수정] 검색창에 포커스가 있거나 검색어가 입력된 경우 리스트 모드 활성화
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -762,6 +911,7 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
   @override
   Widget build(BuildContext context) {
     final socialVM = context.watch<SocialViewModel>();
+
 
     return Scaffold(
       backgroundColor: Colors.white,

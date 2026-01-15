@@ -3,29 +3,92 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../data/repositories.dart'; // 통합 리포지토리 import
 import '../auth/models.dart';         // 유저 모델 import
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geoflutterfire2/geoflutterfire2.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'dart:async';
 
 class SocialViewModel with ChangeNotifier {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-
   final SocialRepository _repo = SocialRepository();
+  final _geo = GeoFlutterFire();
+
+  Timer? _locationUpdateTimer;
+  Timer? _nearbyRefreshTimer;
 
   List<UserModel> _allUsers = [];
   List<UserModel> _filteredUsers = [];
   Set<String> _followingIds = {};
   Set<String> _blockedIds = {};
   List<UserModel> _blockedUserList = [];
+  List<UserModel> _nearbyUsers = []; // 주변 사용자 목록
 
   // 현재 검색어 상태 저장 (팔로우 토글 시 리스트 유지를 위함)
   String _currentSearchQuery = '';
+  bool _isLoading = false;
 
   List<UserModel> get users => _filteredUsers;
   List<UserModel> get blockedUserList => _blockedUserList;
-  bool _isLoading = false;
   bool get isLoading => _isLoading;
+  List<UserModel> get nearbyUsers => _nearbyUsers;
 
   SocialViewModel() {
     fetchUsers();
+  }
+
+  // [추가] 30초 주기 위치 업데이트 시작
+  void startLocationUpdates() {
+    _locationUpdateTimer?.cancel();
+    _locationUpdateTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
+      await updateMyPosition();
+    });
+  }
+
+  // [수정] 주변 사용자 10초 주기 자동 갱신 시작
+  void startNearbyRefresh() {
+    _nearbyRefreshTimer?.cancel();
+    _nearbyRefreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
+      // 검색창에 입력이 없을 때만 주변 유저 정보를 갱신하여 UX 방해 방지
+      if (_currentSearchQuery.isEmpty) {
+        await fetchNearbyUsers();
+      }
+    });
+  }
+
+  // [수정] 페이지 이탈 시 모든 타이머 정지
+  void stopAllSocialTimers() {
+    _locationUpdateTimer?.cancel();
+    _nearbyRefreshTimer?.cancel();
+  }
+
+// [추가] 내 위치를 Firestore users/position 필드에 갱신
+  Future<void> updateMyPosition() async {
+    final myUid = _auth.currentUser?.uid;
+    if (myUid == null) return;
+
+    try {
+      Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high
+      );
+
+      // Firestore 업데이트
+      await _db.collection('users').doc(myUid).update({
+        'position': GeoPoint(position.latitude, position.longitude),
+        'locationUpdatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // 내 위치 갱신 후 주변 사용자 다시 불러오기
+      await fetchNearbyUsers();
+    } catch (e) {
+      debugPrint("내 위치 갱신 실패: $e");
+    }
+  }
+
+  @override
+  void dispose() {
+    _locationUpdateTimer?.cancel(); // 타이머 해제 필수
+    super.dispose();
   }
 
   Future<void> toggleLike({
@@ -81,6 +144,28 @@ class SocialViewModel with ChangeNotifier {
     }
   }
 
+  // 주변 사용자 불러오기 (반경 1km)
+  Future<void> fetchNearbyUsers() async {
+    try {
+      Position myPos = await Geolocator.getCurrentPosition();
+
+      _nearbyUsers = _allUsers.where((user) {
+        if (user.position == null || user.uid == _auth.currentUser?.uid) return false;
+
+        // [해결] GeoPoint.latitude에 직접 접근
+        double distance = Geolocator.distanceBetween(
+          myPos.latitude, myPos.longitude,
+          user.position!.latitude, user.position!.longitude,
+        );
+        return distance <= 1000; // 1km 이내
+      }).toList();
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Nearby Users Error: $e");
+    }
+  }
+
   Future<void> fetchUsers() async {
     final myUid = _auth.currentUser?.uid;
     if (myUid == null) return;
@@ -92,10 +177,12 @@ class SocialViewModel with ChangeNotifier {
       _allUsers = await _repo.getAllUsers(myUid);
       _followingIds = await _repo.getMyFollowingIds(myUid);
       _blockedIds = await _repo.getBlockedUserIds(myUid);
-      
+
+      // 2. 필터링 및 주변 유저 계산 실행
       _applyFilter();
+      await fetchNearbyUsers();
     } catch (e) {
-      print("Social Data Load Error: $e");
+      debugPrint("Social Data Load Error: $e");
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -119,16 +206,20 @@ class SocialViewModel with ChangeNotifier {
     }
   }
 
-  // 필터링 로직 (차단된 유저는 검색에서 제외)
+  // [수정] 검색 및 팔로우 목록 필터링
   void _applyFilter() {
+    // 차단되지 않은 유저 중 나를 제외한 전체 유저
     var baseUsers = _allUsers.where((u) => !_blockedIds.contains(u.uid));
 
     if (_currentSearchQuery.isEmpty) {
+      // 검색어가 없을 때: 내가 팔로우한 사람들만 표시
       _filteredUsers = baseUsers.where((user) => _followingIds.contains(user.uid)).toList();
     } else {
+      // 검색어가 있을 때: 닉네임 검색 결과 표시
       _filteredUsers = baseUsers.where((user) =>
           user.nickname.toLowerCase().contains(_currentSearchQuery.toLowerCase())).toList();
     }
+    notifyListeners();
   }
 
   void searchUsers(String query) {

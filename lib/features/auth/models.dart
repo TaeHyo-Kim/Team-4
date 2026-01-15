@@ -41,7 +41,7 @@ class UserModel {
   final String? bio;
   final String? profileImageUrl;
   final String visibility; // [수정] bool에서 String으로 변경 ('all', 'friends', 'none')
-  final Map<String, dynamic>? position;
+  final GeoPoint? position;
   final UserStats stats;
   final DateTime createdAt;
 
@@ -79,7 +79,8 @@ class UserModel {
       bio: data['bio'],
       profileImageUrl: data['profileImageUrl'],
       visibility: data['visibility'] ?? 'all',
-      position: data['position'],
+      // [수정] Firestore에서 가져온 데이터를 그대로 GeoPoint?로 캐스팅
+      position: data['position'] is GeoPoint ? data['position'] as GeoPoint : null,
       stats: UserStats.fromMap(data['stats'] ?? {}),
       createdAt: (data['createdAt'] as Timestamp).toDate(),
     );

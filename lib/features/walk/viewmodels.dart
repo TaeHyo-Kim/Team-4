@@ -92,6 +92,34 @@ class WalkViewModel with ChangeNotifier {
 
   int get totalDots => reviewImages.isEmpty ? 1 : reviewImages.length;
 
+  // [추가] 산책 강제 취소 및 상태 초기화
+  void cancelWalk() {
+    // 위치 추적 중단
+    _positionStream?.cancel();
+    _timer?.cancel();
+
+    // 상태 변수 초기화
+    _isWalking = false;
+    _isPaused = false;
+    _seconds = 0;
+    _distance = 0.0;
+    _route = [];
+    _currentPosition = null;
+    _startPosition = null;
+
+    // UI 상태를 홈(0)으로 복구
+    walkState = 0;
+
+    // 입력 필드 초기화
+    reviewImages.clear();
+    reviewController.clear();
+
+    notifyListeners();
+
+    // 카메라를 다시 현재 위치로 잡기 위해 호출
+    fetchCurrentLocation();
+  }
+
   void setMapController(GoogleMapController controller) {
     _mapController = controller;
     if (_currentPosition != null) {
