@@ -10,6 +10,7 @@ import '../pet/views.dart';
 import '../../data/repositories.dart';
 import '../walk/models.dart';
 import '../profile/viewmodels.dart';
+import '../social/views.dart'; // [추가] 차단된 계정 화면 이동을 위해 필요
 import 'permission_request_view.dart';
 import '../../core/permission_service.dart';
 import '../../core/notification_service.dart';
@@ -395,7 +396,7 @@ class SettingsScreen extends StatelessWidget {
           _buildMenuItem(context, Icons.person_outline, "계정 관리", () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountManagementScreen()))),
           _buildMenuItem(context, Icons.visibility_outlined, "공개 범위", () => Navigator.push(context, MaterialPageRoute(builder: (_) => const VisibilitySettingsScreen()))),
           _buildMenuItem(context, Icons.lock_open_outlined, "권한 관리", () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PermissionManagementScreen()))),
-          _buildMenuItem(context, Icons.block_flipped, "차단된 계정", () {}),
+          _buildMenuItem(context, Icons.block_flipped, "차단된 계정", () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BlockedUsersScreen()))),
           const Spacer(),
           Padding(
             padding: const EdgeInsets.only(bottom: 100),
