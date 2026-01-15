@@ -448,7 +448,10 @@ class WalkViewModel with ChangeNotifier {
   // [추가] 경로 전체 스냅샷 캡처 로직
   Future<void> _captureFullRouteSnapshot() async {
     // 지도가 없거나 경로가 없으면 즉시 리턴
-    if (_route.isEmpty || _mapController == null) return;
+    if (_route.isEmpty || _mapController == null) {
+      debugPrint("경로가 없거나 컨트롤러가 없어 스냅샷을 건너뜁니다.");
+      return;
+    }
 
     try {
       // 1) 전체 경로를 포함하는 경계(Bounds) 계산
@@ -456,10 +459,10 @@ class WalkViewModel with ChangeNotifier {
 
       // 2) 모든 경로가 보이도록 카메라 이동 (여백 50)
       await _mapController!.animateCamera(
-          CameraUpdate.newLatLngBounds(bounds, 50));
+          CameraUpdate.newLatLngBounds(bounds, 80));
 
       // 3) 지도가 완전히 렌더링될 때까지 충분히 대기 (중요)
-      await Future.delayed(const Duration(milliseconds: 800));
+      await Future.delayed(const Duration(milliseconds: 1000));
 
       // 여기서 "Bad state" 에러가 날 확률이 높으므로 다시 한 번 체크
       if (_mapController != null) {
@@ -492,6 +495,8 @@ class WalkViewModel with ChangeNotifier {
 
   // 좌표 리스트로부터 Bounds 계산 유틸리티
   LatLngBounds _getBounds(List<LatLng> points) {
+    if (points.isEmpty) return LatLngBounds(southwest: const LatLng(0,0), northeast: const LatLng(0,0));
+
     double minLat = points.first.latitude;
     double maxLat = points.first.latitude;
     double minLng = points.first.longitude;

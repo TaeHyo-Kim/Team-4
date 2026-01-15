@@ -4,6 +4,22 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'viewmodels.dart';
 
+// [1] PetModel: 펫 정보를 담는 클래스
+class PetModel {
+  final String id;
+  final String name;
+
+  PetModel({required this.id, required this.name});
+
+  factory PetModel.fromDocument(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return PetModel(
+      id: doc.id,
+      name: data['name'] as String? ?? '이름 미정',
+    );
+  }
+}
+
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key});
 
@@ -147,10 +163,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      return const Scaffold(body: Center(child: Text("로그인이 필요합니다.")));
-    }
+    if (user == null) return const Scaffold(body: Center(child: Text("로그인이 필요합니다.")));
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -161,63 +174,83 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         elevation: 0,
         foregroundColor: Colors.white,
       ),
-      // [단계 1] 펫 명부(Pets) 구독
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('pets')
-            .where('ownerId', isEqualTo: user.uid)
-            .snapshots(),
-        builder: (context, petSnapshot) {
-          Map<String, String> petMap = {};
-
-          if (petSnapshot.hasData) {
-            for (var doc in petSnapshot.data!.docs) {
-              final pet = PetModel.fromDocument(doc);
-              petMap[pet.id] = pet.name;
-            }
+      // 뷰모델의 isLoading 상태와 records를 사용하여 화면을 구성합니다.
+      body: Consumer<StatViewModel>(
+        builder: (context, vm, child) {
+          if (vm.isLoading) {
+            return const Center(child: CircularProgressIndicator());
           }
-          petMap.addAll(_localPetNames);
 
-          // [단계 2] 산책 기록 스트림
-          return StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('users')
-                .doc(user.uid)
-                .collection('walks')
-                .snapshots(),
-            builder: (context, walkSnapshot) {
-              if (walkSnapshot.connectionState == ConnectionState.waiting && !walkSnapshot.hasData) {
-                return const Center(child: CircularProgressIndicator());
-              }
+          if (vm.records.isEmpty) {
+            return RefreshIndicator(
+              onRefresh: () => vm.fetchStatistics(),
+              child: const SingleChildScrollView(
+                physics: AlwaysScrollableScrollPhysics(),
+                child: SizedBox(
+                  height: 500,
+                  child: Center(child: Text("산책 기록이 없습니다.")),
+                ),
+              ),
+            );
+          }
 
-              if (walkSnapshot.hasError) {
-                return StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('walks')
-                        .where('userId', isEqualTo: user.uid)
-                        .snapshots(),
-                    builder: (ctx, subSnap) {
-                      if (subSnap.hasData) {
-                        return Consumer<StatViewModel>(
-                          builder: (context, vm, child) {
-                            return _buildContent(ctx, subSnap.data!.docs, vm, petMap);
-                          },
-                        );
-                      }
-                      if (subSnap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-                      return const Center(child: SizedBox());
-                    }
-                );
-              }
+          // 통계 계산 실행 (뷰모델에 저장된 records와 petNames 사용)
+          final stats = _calculateStats(vm.records, vm.isMonthly, vm.petNames);
 
-              final docs = walkSnapshot.data?.docs ?? [];
-
-              return Consumer<StatViewModel>(
-                builder: (context, vm, child) {
-                  return _buildContent(context, docs, vm, petMap);
-                },
-              );
-            },
+          return RefreshIndicator(
+            onRefresh: () => vm.fetchStatistics(),
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildToggleButtons(vm),
+                    const SizedBox(height: 30),
+                    _buildSummaryHeader(
+                        stats['totalDist'] as double,
+                        stats['headerTotalTime'] as int,
+                        vm.isMonthly
+                    ),
+                    const SizedBox(height: 30),
+                    _buildBarChart(stats['chartData'] as List<Map<String, dynamic>>, vm.isMonthly),
+                    const SizedBox(height: 40),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        vm.isMonthly ? "${DateTime.now().month}월에는?" : "오늘은 어땠나요?",
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: vm.isMonthly
+                          ? _buildMonthlyAnalysis(stats)
+                          : _buildDailyAnalysis(stats),
+                    ),
+                    const SizedBox(height: 30),
+                    const Divider(thickness: 1, color: Colors.grey),
+                    const SizedBox(height: 20),
+                    Text(
+                      vm.isMonthly ? "이번 달 펫별 활동" : "오늘 펫별 활동",
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 15),
+                    // 하단 리스트도 뷰모델 데이터를 기반으로 생성
+                    _buildPetAggregatedList(vm.records, vm.isMonthly, vm.petNames),
+                    const SizedBox(height: 40),
+                  ],
+                ),
+              ),
+            ),
           );
         },
       ),
@@ -372,8 +405,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final hours = seconds ~/ 3600;
     final minutes = (seconds % 3600) ~/ 60;
     String timeStr = "";
-    if (hours > 0) timeStr += "$hours시간 ";
-    timeStr += "$minutes분";
+    if (hours > 0) timeStr += "${hours}시간 ";
+    timeStr += "${minutes}분";
 
     return InkWell(
       onLongPress: () {
@@ -404,8 +437,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text("총 $count회 산책", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                ],
+              Text("총 ${count}회 산책", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+              ],
               ),
             ),
             Column(
@@ -585,8 +618,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
     final h = totalSeconds ~/ 3600;
     final m = (totalSeconds % 3600) ~/ 60;
-    String timeStr = "$m분";
-    if (h > 0) timeStr = "$h시간 $m분";
+    String timeStr = "${m}분";
+    if (h > 0) timeStr = "${h}시간 ${m}분";
 
     return Column(
       children: [
@@ -601,7 +634,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               textBaseline: TextBaseline.alphabetic,
               children: [
                 Text(
-                    totalDist.toStringAsFixed(1),
+                    "${totalDist.toStringAsFixed(1)}",
                     style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Color(0xFF4CAF50))
                 ),
                 const SizedBox(width: 4),

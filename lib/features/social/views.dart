@@ -33,6 +33,9 @@ class _SocialScreenState extends State<SocialScreen> {
   @override
   void initState() {
     super.initState();
+    // [수정] FocusNode 리스너 등록: 검색창 클릭 시 상태 반영을 위해 필수
+    _searchFocus.addListener(_onSearchFocusChange);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final socialVM = context.read<SocialViewModel>();
       final authVM = context.read<AuthViewModel>();
@@ -62,6 +65,9 @@ class _SocialScreenState extends State<SocialScreen> {
 
   @override
   void dispose() {
+    // [수정] 리스너 해제: 메모리 누수 방지
+    _searchFocus.removeListener(_onSearchFocusChange);
+
     _searchCtrl.dispose();
     _searchFocus.dispose();
     _mapInactivityTimer?.cancel(); // [추가] 타이머 해제
