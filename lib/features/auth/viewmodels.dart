@@ -93,7 +93,7 @@ class AuthViewModel with ChangeNotifier {
       case 'email-already-in-use': return '이미 가입된 이메일입니다.';
       case 'weak-password': return '비밀번호는 6자리 이상이어야 합니다.';
       case 'invalid-email': return '유효하지 않은 이메일 형식입니다.';
-      case 'user-not-found':
+      case 'user-not-found': return '가입되지 않은 계정입니다.'; // [수정] 분리 및 메시지 변경
       case 'wrong-password':
       case 'invalid-credential': return '비밀번호가 틀렸습니다.'; // '이메일 또는' 제거
       case 'too-many-requests': return '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.';
@@ -121,6 +121,26 @@ class AuthViewModel with ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
+      // 1. 가입된 계정인지 Firestore에서 먼저 확인 시도
+      try {
+        final userQuery = await _db.collection('users')
+            .where('email', isEqualTo: email)
+            .limit(1)
+            .get();
+
+        if (userQuery.docs.isEmpty) {
+          _errorMessage = '가입되지 않은 계정입니다.';
+          _isLoading = false;
+          notifyListeners();
+          return;
+        }
+      } catch (e) {
+        // Firestore 규칙상 비로그인 유저가 접근 불가능할 경우 에러가 날 수 있습니다.
+        // 이 경우 확인을 건너뛰고 바로 Auth 로그인을 시도합니다.
+        debugPrint("Firestore 가입 여부 확인 실패 (건너뜀): $e");
+      }
+
+      // 2. 계정이 존재하거나 확인을 건너뛴 경우 로그인 시도
       final userCredential = await _auth.signInWithEmailAndPassword(email: email, password: password);
       debugPrint("로그인 성공");
 
@@ -133,6 +153,7 @@ class AuthViewModel with ChangeNotifier {
     } on FirebaseAuthException catch (e) {
       _errorMessage = _parseFirebaseError(e);
     } catch (e) {
+      debugPrint("로그인 일반 에러: $e");
       _errorMessage = '로그인 중 오류가 발생했습니다.';
     } finally {
       _isLoading = false;
