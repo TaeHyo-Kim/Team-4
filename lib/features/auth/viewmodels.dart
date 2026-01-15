@@ -263,6 +263,8 @@ class AuthViewModel with ChangeNotifier {
 
     try {
       final uid = user.uid;
+      await _userSub?.cancel();
+      await _sessionSub?.cancel();
       final batch = _db.batch();
       // 1. 계정 삭제 시도 (보안 민감 작업이므로 먼저 수행)
       // 여기서 'requires-recent-login' 에러가 나면 아래 Firestore 삭제를 실행하지 않음
@@ -283,18 +285,15 @@ class AuthViewModel with ChangeNotifier {
       await batch.commit();
       await user.delete();
 
-      _userSub?.cancel();
-      _sessionSub?.cancel();
+      _user = null;
       _userModel = null;
-      _errorMessage = null;
+      _currentDeviceToken = null;
       debugPrint("회원 탈퇴 및 세션 정리 완료");
 
     } on FirebaseAuthException catch (e) {
       _errorMessage = _parseFirebaseError(e);
-      if (e.code == 'requires-recent-login') {
-        _errorMessage = '보안을 위해 다시 로그인한 후 탈퇴를 진행해 주세요.';
-      }
     } catch (e) {
+      debugPrint("탈퇴 일반 에러: $e");
       _errorMessage = '회원 탈퇴 중 오류가 발생했습니다.';
     } finally {
       _isLoading = false;

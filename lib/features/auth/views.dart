@@ -667,7 +667,7 @@ class AccountManagementScreen extends StatelessWidget {
   void _showDeleteAccountDialog(BuildContext context, AuthViewModel authVM) {
     showDialog(
       context: context,
-      barrierDismissible: !authVM.isLoading, 
+      barrierDismissible: false,
       builder: (ctx) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
         backgroundColor: Colors.white,
@@ -707,10 +707,20 @@ class AccountManagementScreen extends StatelessWidget {
                             await vm.deleteAccount();
                             if (!context.mounted) return;
                             if (vm.errorMessage != null) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(vm.errorMessage!), backgroundColor: Colors.redAccent));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(vm.errorMessage!), backgroundColor: Colors.redAccent)
+                              );
+                              Navigator.pop(ctx); // 다이얼로그 닫기
                             } else {
-                              Navigator.of(context, rootNavigator: true).pop();
-                              Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false);
+                              // 탈퇴 성공 시: 다이얼로그 닫고 로그인 화면으로 완전히 이동
+                              // [수정] rootNavigator를 사용하여 다이얼로그를 확실히 닫음
+                              Navigator.of(ctx, rootNavigator: true).pop();
+
+                              // [핵심] 모든 경로를 지우고 LoginScreen을 새로운 루트로 설정
+                              Navigator.of(context).pushAndRemoveUntil(
+                                MaterialPageRoute(builder: (_) => const LoginScreen()),
+                                    (route) => false,
+                              );
                             }
                           },
                           style: ElevatedButton.styleFrom(
