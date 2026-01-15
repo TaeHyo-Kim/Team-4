@@ -20,6 +20,9 @@ class WalkViewModel with ChangeNotifier {
   final WalkRepository _repo = WalkRepository();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  BitmapDescriptor? _cachedPetIcon; // 캐시된 아이콘
+  BitmapDescriptor? get petIcon => _cachedPetIcon;
+
   // [수정 10] 이모지 그룹화
   final List<List<String>> emojiGroups = [
     ['👍', '👌', '❤️', '😊', '🥰'], // 그룹 1 (기본 노출)
@@ -228,9 +231,30 @@ class WalkViewModel with ChangeNotifier {
       distanceFilter: 5,
     );
 
-    _positionStream =
-        Geolocator.getPositionStream(locationSettings: locationSettings)
-            .listen((Position position) async {
+    final AppleSettings appleSettings = AppleSettings(
+      accuracy: LocationAccuracy.best,
+      distanceFilter: 0, // 0으로 설정해야 실시간성이 높아짐
+      pauseLocationUpdatesAutomatically: false,
+      showBackgroundLocationIndicator: true,
+    );
+
+    final AndroidSettings androidSettings = AndroidSettings(
+      accuracy: LocationAccuracy.best,
+      distanceFilter: 0, // 미세한 움직임도 감지
+      forceLocationManager: false,
+      intervalDuration: const Duration(seconds: 1), // 1초마다 갱신
+      // [중요] 백그라운드 유지를 위한 알림 설정
+      foregroundNotificationConfig: const ForegroundNotificationConfig(
+        notificationTitle: "산책 기록 중",
+        notificationText: "오늘도 강아지와 함께 즐겁게 산책 중입니다.",
+        notificationIcon: AndroidResource(name: 'notification_icon', defType: 'drawable'),
+        enableWakeLock: true, // 화면이 꺼져도 CPU를 깨움
+      ),
+    );
+
+    _positionStream = Geolocator.getPositionStream(
+      locationSettings: locationSettings,
+    ).listen((Position position) async {
           if (!_isWalking || walkState != 1) return;
 
           final newPoint = LatLng(position.latitude, position.longitude);
@@ -810,7 +834,7 @@ class WalkViewModel with ChangeNotifier {
   }
 
   // 반려동물 목록 업데이트 및 정렬
-  void _updatePetsList() {
+  void _updatePetsList() async {
     // isPrimary가 true인 동물을 우선 정렬
     myPets.sort((a, b) {
       final aPrimary = a['isPrimary'] == true ? 1 : 0;
@@ -822,6 +846,10 @@ class WalkViewModel with ChangeNotifier {
       // 대표 반려동물을 기본값으로 설정
       selectedPet = myPets.firstWhere((p) => p['isPrimary'] == true,
           orElse: () => myPets.first);
+      if (selectedPet?['imageUrl'] != null) {
+        _cachedPetIcon = await getPetMarkerIcon(selectedPet!['imageUrl']);
+        notifyListeners();
+      }
 
       // 대표 반려동물이 선택되지 않은 경우에만 자동으로 선택된 상태로 설정
       if (selectedPetIds.isEmpty) {
@@ -866,9 +894,7 @@ class WalkViewModel with ChangeNotifier {
     _petsSubscription = FirebaseFirestore.instance
         .collection('pets')
         .where('ownerId', isEqualTo: uid)
-        .snapshots()
-        .listen(
-          (snapshot) {
+        .snapshots().listen((snapshot) async { // async 추가
         debugPrint('반려동물 목록 업데이트: ${snapshot.docs.length}개');
 
         // 문서 ID도 함께 저장
@@ -877,6 +903,12 @@ class WalkViewModel with ChangeNotifier {
           data['id'] = doc.id; // 문서 ID 추가
           return data;
         }).toList();
+
+        // 현재 선택된 펫의 데이터가 바뀌었는지 확인 후 아이콘 갱신
+        final currentPetData = myPets.firstWhere((p) => p['id'] == selectedPet?['id'], orElse: () => {});
+        if (currentPetData['imageUrl'] != selectedPet?['imageUrl']) {
+          _cachedPetIcon = await getPetMarkerIcon(currentPetData['imageUrl']);
+        }
 
         _updatePetsList();
       },

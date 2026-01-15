@@ -35,10 +35,13 @@ class _SocialScreenState extends State<SocialScreen> {
   @override
   void initState() {
     super.initState();
-    _searchFocus.addListener(_onSearchFocusChange);
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<SocialViewModel>().fetchUsers();
+      final socialVM = context.read<SocialViewModel>();
+      final authVM = context.read<AuthViewModel>();
+
+      socialVM.fetchUsers();
+      // 진입 시 내 프로필 마커 생성
+      socialVM.createProfileMarker(authVM.userModel?.profileImageUrl);
     });
   }
 
@@ -49,12 +52,14 @@ class _SocialScreenState extends State<SocialScreen> {
     });
   }
 
-  // [추가] image_6b6b84.png 46~63번 라인 관련 상호작용 로직 (에러 해결용)
-  void _onInteractionStarted() {
-    setState(() {
-      _isUserInteracting = true;
-      _mapInactivityTimer?.cancel();
-    });
+  // [수정] 상호작용 종료 시 5초 후 복귀 타이머 작동
+   void _onInteractionStarted() {
+    if (!_isUserInteracting) {
+      setState(() {
+        _isUserInteracting = true;
+      });
+    }
+    _mapInactivityTimer?.cancel();
   }
 
   @override
@@ -67,13 +72,13 @@ class _SocialScreenState extends State<SocialScreen> {
 
 // [추가] 조작 종료 후 5초 대기 후 중심 이동
   void _onInteractionEnded() {
-    _mapInactivityTimer?.cancel();_mapInactivityTimer = Timer(const Duration(seconds: 5), () async {
-      if (mounted && !_isUserInteracting) {
-        setState(() {
-          _isUserInteracting = false;
-        });
-        // [추가] 요구사항에 따라 내 위치로 카메라 이동
-        await _moveToMyLocation();
+    setState(() {
+      _isUserInteracting = false;
+    });
+    _mapInactivityTimer?.cancel();
+    _mapInactivityTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted && !_isUserInteracting && !_isSearchBarFocused) {
+        _moveToMyLocation();
       }
     });
   }
@@ -84,7 +89,12 @@ class _SocialScreenState extends State<SocialScreen> {
     try {
       Position pos = await Geolocator.getCurrentPosition();
       await _mapController!.animateCamera(
-          CameraUpdate.newLatLng(LatLng(pos.latitude, pos.longitude))
+          CameraUpdate.newCameraPosition(
+              CameraPosition(
+                target: LatLng(pos.latitude, pos.longitude),
+                zoom: 16.5, // 산책 기능과 동일한 비율 적용
+              ),
+          ),
       );
     } catch (e) {
       debugPrint("지도 중심 이동 실패: $e");
@@ -170,31 +180,58 @@ class _SocialScreenState extends State<SocialScreen> {
             GoogleMap(
               initialCameraPosition: CameraPosition(target: myLatLng, zoom: 15),
               onMapCreated: (controller) => _mapController = controller,
-              myLocationEnabled: true,
-              myLocationButtonEnabled: false, // 커스텀 로직이 있으므로 버튼은 숨김
+              // [수정] 지도의 기본 UI 버튼들 제거 (커스텀 버튼과 겹침 방지)
+              myLocationEnabled: false,      // 파란 점 제거 (프로필 마커로 대체)
+              myLocationButtonEnabled: false, // 기본 내 위치 버튼 제거
+              mapToolbarEnabled: false,      // 하단 길찾기/맵 버튼 제거 (image_86a5d4 해결)
+              zoomControlsEnabled: false,    // +/- 버튼 제거
               circles: {
                 Circle(
                   circleId: const CircleId("nearby_range"),
                   center: myLatLng,
                   radius: 1000, // 1km
-                  fillColor: Colors.blue.withOpacity(0.05),
-                  strokeColor: Colors.blue.withOpacity(0.2),
+                  fillColor: const Color(0xFFFF9800).withOpacity(0.1),
+                  strokeColor: const Color(0xFFFF9800).withOpacity(0.4),
                   strokeWidth: 1,
                 ),
               },
               // [수정] 커스텀 마커 적용 및 클릭 이벤트
-              markers: vm.nearbyUsers.map((user) {
-                final pos = user.position as GeoPoint?; // 명시적 캐스팅
-                return Marker(
-                  markerId: MarkerId(user.uid),
-                  position: LatLng(pos?.latitude ?? 0.0, pos?.longitude ?? 0.0),
-                  onTap: () {
-                    _onInteractionStarted(); // 마커 클릭 시 자동 이동 일시 중지
-                    setState(() => _selectedUser = user);
-                  },
-                );
-              }).toSet(),
-              onTap: (_) => setState(() => _selectedUser = null), // 빈 화면 터치 시 정보창 닫기
+              markers: {
+                // 1번 요청: 내 위치를 프로필 사진 마커로 표시
+                Marker(
+                  markerId: const MarkerId("my_profile_marker"),
+                  position: myLatLng,
+                  icon: vm.myProfileIcon ?? BitmapDescriptor.defaultMarker,
+                  anchor: const Offset(0.5, 0.5), // 마커 중심 정렬
+                ),
+                // 주변 유저 마커들...
+                ...vm.nearbyUsers.map((user) {
+                  final pos = user.position as GeoPoint?;
+                  return Marker(
+                    markerId: MarkerId(user.uid),
+                    position: LatLng(pos?.latitude ?? 0.0, pos?.longitude ?? 0.0),
+                    onTap: () {
+                      _onInteractionStarted();
+                      setState(() => _selectedUser = user);
+                    },
+                  );
+                }),
+              },
+              // 지도 조작 감지 (4번 요청 관련)
+              onCameraMoveStarted: () => _onInteractionStarted(),
+              onTap: (_) => setState(() => _selectedUser = null),
+            ),
+
+            // 5번 요청: 현재 위치로 이동하는 플로팅 버튼
+            Positioned(
+              bottom: _selectedUser != null ? 180 : 40,
+              right: 20,
+              child: FloatingActionButton(
+                mini: true,
+                backgroundColor: Colors.white,
+                onPressed: _moveToMyLocation,
+                child: const Icon(Icons.my_location, color: Color(0xFF4CAF50)),
+              ),
             ),
 
             // [추가] 마커 클릭 시 나타나는 정보 상자 (image_6af28c.png 스타일)

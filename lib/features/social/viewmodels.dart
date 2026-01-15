@@ -7,6 +7,9 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geoflutterfire2/geoflutterfire2.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'dart:async';
+import 'dart:ui' as ui;
+import 'package:http/http.dart' as http;
+import 'dart:typed_data'; // [해결] Undefined class 'ByteData' 에러 해결
 
 class SocialViewModel with ChangeNotifier {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -35,6 +38,107 @@ class SocialViewModel with ChangeNotifier {
 
   SocialViewModel() {
     fetchUsers();
+  }
+
+  BitmapDescriptor? _myLocationIcon;
+  BitmapDescriptor? get myLocationIcon => _myLocationIcon;
+
+  BitmapDescriptor? _myProfileIcon;
+  BitmapDescriptor? get myProfileIcon => _myProfileIcon; // views.dart에서 접근할 이름
+
+  // [추가] 프로필 이미지를 원형 마커로 변환 (산책 기능 로직 재사용)
+  Future<void> createProfileMarker(String? imageUrl) async {
+    if (imageUrl == null || imageUrl.isEmpty) return;
+
+    try {
+      final http.Response response = await http.get(Uri.parse(imageUrl));
+      final ui.Codec codec = await ui.instantiateImageCodec(
+        response.bodyBytes,
+        targetWidth: 150, // 마커 크기
+        targetHeight: 150,
+      );
+      final ui.FrameInfo fi = await codec.getNextFrame();
+      final ui.Image image = fi.image;
+
+      final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
+      final Canvas canvas = Canvas(pictureRecorder);
+      final Paint paint = Paint()..isAntiAlias = true;
+      final double radius = 75.0;
+
+      // 원형 절삭
+      canvas.drawCircle(Offset(radius, radius), radius, paint);
+      paint.blendMode = BlendMode.srcIn;
+      canvas.drawImage(image, Offset.zero, paint);
+
+      // 테두리 추가
+      final Paint borderPaint = Paint()
+        ..color = const Color(0xFFFF9800)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 6;
+      canvas.drawCircle(Offset(radius, radius), radius, borderPaint);
+
+      final ui.Image finalImage = await pictureRecorder.endRecording().toImage(150, 150);
+      final ByteData? byteData = await finalImage.toByteData(format: ui.ImageByteFormat.png);
+
+      _myProfileIcon = BitmapDescriptor.fromBytes(byteData!.buffer.asUint8List());
+      notifyListeners();
+    } catch (e) {
+      debugPrint("소셜 마커 생성 실패: $e");
+    }
+  }
+
+  // [추가] 내 프로필 이미지를 마커용 비트맵으로 변환
+  Future<void> createMyLocationMarker(String? imageUrl) async {
+    if (imageUrl == null || imageUrl.isEmpty) {
+      _myLocationIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure);
+      notifyListeners();
+      return;
+    }
+
+    try {
+      final http.Response response = await http.get(Uri.parse(imageUrl));
+      final ui.Codec codec = await ui.instantiateImageCodec(
+        response.bodyBytes,
+        targetWidth: 120, // 마커 사이즈 조절
+        targetHeight: 120,
+      );
+      final ui.FrameInfo fi = await codec.getNextFrame();
+      final ui.Image image = fi.image;
+
+      final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
+      final Canvas canvas = Canvas(pictureRecorder);
+      final Paint paint = Paint()..isAntiAlias = true;
+      const double radius = 60.0;
+
+      // 원형 클리핑
+      canvas.drawCircle(const Offset(radius, radius), radius, paint);
+      paint.blendMode = BlendMode.srcIn;
+      canvas.drawImage(image, Offset.zero, paint);
+
+      // 테두리 추가 (선택 사항)
+      final Paint borderPaint = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 5;
+      canvas.drawCircle(const Offset(radius, radius), radius, borderPaint);
+
+      final ui.Image finalImage = await pictureRecorder.endRecording().toImage(120, 120);
+      final byteData = await finalImage.toByteData(format: ui.ImageByteFormat.png);
+      _myLocationIcon = BitmapDescriptor.fromBytes(byteData!.buffer.asUint8List());
+      notifyListeners();
+    } catch (e) {
+      debugPrint("마커 생성 실패: $e");
+      _myLocationIcon = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure);
+      notifyListeners();
+    }
+  }
+
+  // fetchUsers 등 초기화 시 호출하도록 보강
+  Future<void> initSocialData(UserModel? myProfile) async {
+    if (myProfile != null) {
+      await createMyLocationMarker(myProfile.profileImageUrl);
+    }
+    await fetchUsers();
   }
 
   // [추가] 30초 주기 위치 업데이트 시작

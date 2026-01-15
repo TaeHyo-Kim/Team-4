@@ -755,7 +755,7 @@ class _WalkScreenState extends State<WalkScreen> {
               target: vm.currentPosition ?? const LatLng(37.5665, 126.9780),
               zoom: 16.5,
             ),
-            myLocationEnabled: true,
+            myLocationEnabled: false,
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             scrollGesturesEnabled: interaction,
@@ -774,8 +774,10 @@ class _WalkScreenState extends State<WalkScreen> {
                   markerId: const MarkerId("pet_location"),
                   position: vm.currentPosition!,
                   // 스냅샷 데이터(가공된 펫 이미지)가 있으면 적용, 없으면 기본 로딩용 마커
-                  icon: snapshot.data ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-                ),
+                    // [수정] FutureBuilder를 쓰지 않고 ViewModel에 저장된 캐시 아이콘을 사용
+                    icon: vm.petIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+                    anchor: const Offset(0.5, 0.5), // 마커의 중심을 좌표에 맞춤
+                    ),
             },
             onMapCreated: (controller) => vm.setMapController(controller),
           );
