@@ -283,16 +283,22 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   final _pwCtrl = TextEditingController();
+  final _confirmPwCtrl = TextEditingController(); // [추가] 비밀번호 확인용
   final _nickCtrl = TextEditingController();
   bool _isObscure = true;
-  bool _agreedToTerms = false;
+  bool _isConfirmObscure = true; // [추가] 확인용 비밀번호 가리기 상태
 
   void _handleSignUp() async {
     if (!_formKey.currentState!.validate()) return;
-    if (!_agreedToTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("서비스 이용 및 위치 정보 제공 약관에 동의해주세요.")));
+
+    // [추가] 비밀번호 일치 확인 로직
+    if (_pwCtrl.text != _confirmPwCtrl.text) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("비밀번호가 일치하지 않습니다."), backgroundColor: Colors.redAccent),
+      );
       return;
     }
+    
     final vm = context.read<AuthViewModel>();
     await vm.signUp(_emailCtrl.text.trim(), _pwCtrl.text.trim(), _nickCtrl.text.trim());
 
@@ -314,80 +320,128 @@ class _SignUpScreenState extends State<SignUpScreen> {
       appBar: AppBar(
         title: const Text("회원가입", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF4CAF50),
+        elevation: 0,
+        centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 30),
         child: Form(
           key: _formKey,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const Text("만나서 반가워요!", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
+              const SizedBox(height: 8),
+              const Text("Walkies 계정을 만들고 산책을 시작해보세요.", style: TextStyle(fontSize: 15, color: Colors.grey)),
+              const SizedBox(height: 30),
+              _buildLabel("이메일 주소"),
               TextFormField(
                 controller: _emailCtrl, 
-                decoration: InputDecoration(
-                  labelText: "이메일", 
-                  prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFF4CAF50)),
-                  filled: true,
-                  fillColor: Colors.grey[50],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: Colors.grey[200]!)),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: Colors.grey[200]!)),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Color(0xFF4CAF50), width: 2)),
+                decoration: _inputDecoration(
+                  hint: "example@walkies.com",
+                  icon: Icons.email_outlined,
                 ), 
                 validator: (v) => (v == null || !v.contains('@')) ? '올바른 이메일을 입력하세요.' : null
               ),
               const SizedBox(height: 16),
+              _buildLabel("비밀번호"),
               TextFormField(
-                controller: _pwCtrl, obscureText: _isObscure,
-                decoration: InputDecoration(
-                  labelText: "비밀번호 (6자리 이상)", 
-                  prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF4CAF50)),
-                  suffixIcon: IconButton(icon: Icon(_isObscure ? Icons.visibility_off : Icons.visibility, color: Colors.grey), onPressed: () => setState(() => _isObscure = !_isObscure)),
-                  filled: true,
-                  fillColor: Colors.grey[50],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: Colors.grey[200]!)),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: Colors.grey[200]!)),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Color(0xFF4CAF50), width: 2)),
+                controller: _pwCtrl, 
+                obscureText: _isObscure,
+                decoration: _inputDecoration(
+                  hint: "6자리 이상 입력해주세요",
+                  icon: Icons.lock_outline,
+                  isPassword: true,
+                  isObscure: _isObscure,
+                  onToggle: () => setState(() => _isObscure = !_isObscure),
                 ),
                 validator: (v) => (v == null || v.length < 6) ? '비밀번호는 6자리 이상이어야 합니다.' : null,
               ),
               const SizedBox(height: 16),
+              _buildLabel("비밀번호 확인"), // [추가]
+              TextFormField(
+                controller: _confirmPwCtrl, 
+                obscureText: _isConfirmObscure,
+                decoration: _inputDecoration(
+                  hint: "비밀번호를 한 번 더 입력해주세요",
+                  icon: Icons.lock_clock_outlined,
+                  isPassword: true,
+                  isObscure: _isConfirmObscure,
+                  onToggle: () => setState(() => _isConfirmObscure = !_isConfirmObscure),
+                ),
+                validator: (v) => (v == null || v.isEmpty) ? '비밀번호 확인을 입력해주세요.' : null,
+              ),
+              const SizedBox(height: 16),
+              _buildLabel("닉네임"),
               TextFormField(
                 controller: _nickCtrl, 
-                decoration: InputDecoration(
-                  labelText: "닉네임", 
-                  prefixIcon: const Icon(Icons.person_outline, color: Color(0xFF4CAF50)),
-                  helperText: "다른 유저에게 표시될 이름입니다.",
-                  filled: true,
-                  fillColor: Colors.grey[50],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: Colors.grey[200]!)),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: Colors.grey[200]!)),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Color(0xFF4CAF50), width: 2)),
+                decoration: _inputDecoration(
+                  hint: "사용할 닉네임을 입력해주세요",
+                  icon: Icons.person_outline,
                 ), 
                 validator: (v) => (v == null || v.length < 2) ? '닉네임은 2글자 이상 입력해주세요.' : null
               ),
-              const SizedBox(height: 24),
-              CheckboxListTile(
-                value: _agreedToTerms, onChanged: (v) => setState(() => _agreedToTerms = v ?? false),
-                title: const Text("서비스 이용 및 위치 정보 제공 약관에 동의합니다. (필수)", style: TextStyle(fontSize: 14)),
-                activeColor: const Color(0xFF4CAF50), controlAffinity: ListTileControlAffinity.leading, contentPadding: EdgeInsets.zero,
-              ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 35),
               SizedBox(
-                width: double.infinity, height: 55,
+                width: double.infinity, height: 60,
                 child: ElevatedButton(
                   onPressed: isLoading ? null : _handleSignUp,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFF9800),
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    elevation: 0,
                   ),
-                  child: isLoading ? const AppLoadingIndicator(color: Colors.white) : const Text("가입하기", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  child: isLoading 
+                    ? const AppLoadingIndicator(color: Colors.white) 
+                    : const Text("가입하기", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Center(
+                child: Text(
+                  "가입하기 버튼을 누르면 서비스 이용약관 및\n위치 정보 제공에 동의하는 것으로 간주됩니다.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: Colors.grey, height: 1.5),
                 ),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8),
+      child: Text(text, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF4CAF50))),
+    );
+  }
+
+  InputDecoration _inputDecoration({
+    required String hint, 
+    required IconData icon, 
+    bool isPassword = false,
+    bool? isObscure,
+    VoidCallback? onToggle,
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+      prefixIcon: Icon(icon, color: const Color(0xFF4CAF50), size: 22),
+      suffixIcon: isPassword ? IconButton(
+        icon: Icon(isObscure! ? Icons.visibility_off : Icons.visibility, color: Colors.grey[400], size: 20),
+        onPressed: onToggle,
+      ) : null,
+      filled: true,
+      fillColor: Colors.grey[50],
+      contentPadding: const EdgeInsets.symmetric(vertical: 18),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: Colors.grey[200]!)),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: Colors.grey[200]!)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: const BorderSide(color: Color(0xFF4CAF50), width: 1.5)),
+      errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: const BorderSide(color: Colors.redAccent, width: 1)),
     );
   }
 }
