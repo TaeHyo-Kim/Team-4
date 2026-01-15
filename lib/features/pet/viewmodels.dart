@@ -42,7 +42,7 @@ class PetViewModel with ChangeNotifier {
         notifyListeners();
       },
       onError: (error) {
-        print("펫 스트림 오류: $error");
+        debugPrint("펫 스트림 오류: $error");
         _isLoading = false;
         notifyListeners();
       },
@@ -77,7 +77,7 @@ class PetViewModel with ChangeNotifier {
       // 업로드된 이미지의 URL 반환
       return await snapshot.ref.getDownloadURL();
     } catch (e) {
-      print("이미지 업로드 에러: $e");
+      debugPrint("이미지 업로드 에러: $e");
       return null;
     }
   }

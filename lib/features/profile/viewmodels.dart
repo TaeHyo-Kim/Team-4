@@ -16,6 +16,9 @@ class ProfileViewModel with ChangeNotifier {
   List<WalkRecordModel> _walkRecords = [];
   List<WalkRecordModel> get walkRecords => _walkRecords;
 
+  List<WalkRecordModel> _otherUserWalkRecords = [];
+  List<WalkRecordModel> get otherUserWalkRecords => _otherUserWalkRecords;
+
   List<UserModel> _followingUsers = [];
   List<UserModel> _followerUsers = [];
 
@@ -41,7 +44,28 @@ class ProfileViewModel with ChangeNotifier {
 
       _walkRecords = snapshot.docs.map((doc) => WalkRecordModel.fromDocument(doc)).toList();
     } catch (e) {
-      debugPrint("산책 기록 로드 실패: $e");
+      debugPrint("내 산책 기록 로드 실패: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // 다른 사용자의 산책 기록 로드
+  Future<void> fetchOtherUserWalks(String userId) async {
+    _isLoading = true;
+    _otherUserWalkRecords = [];
+    notifyListeners();
+
+    try {
+      final snapshot = await _db.collection('walks')
+          .where('userId', isEqualTo: userId)
+          .orderBy('startTime', descending: true)
+          .get();
+
+      _otherUserWalkRecords = snapshot.docs.map((doc) => WalkRecordModel.fromDocument(doc)).toList();
+    } catch (e) {
+      debugPrint("다른 사용자 산책 기록 로드 실패: $e");
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -63,14 +87,12 @@ class ProfileViewModel with ChangeNotifier {
     try {
       String? imageUrl;
 
-      // 1. 이미지가 있으면 스토리지에 업로드
       if (imageFile != null) {
         final ref = _storage.ref().child('profiles/$uid/profile.png');
         await ref.putFile(imageFile);
         imageUrl = await ref.getDownloadURL();
       }
 
-      // 2. Firestore 업데이트 데이터 구성
       final updates = {
         'nickname': nickname,
         'bio': bio,
@@ -79,7 +101,6 @@ class ProfileViewModel with ChangeNotifier {
         updates['profileImageUrl'] = imageUrl;
       }
 
-      // 3. DB 반영
       await _db.collection('users').doc(uid).update(updates);
 
     } catch (e) {
@@ -88,21 +109,6 @@ class ProfileViewModel with ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
-    }
-  }
-
-  // 기존 메서드 유지 (필요시 사용)
-  Future<void> updateProfileInfo(String nickname, String bio) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-
-    try {
-      await _db.collection('users').doc(uid).update({
-        'nickname': nickname,
-        'bio': bio,
-      });
-    } catch (e) {
-      rethrow;
     }
   }
 

@@ -1,8 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'viewmodels.dart';
 import '../auth/models.dart';
 import '../profile/views.dart';
+import '../profile/viewmodels.dart';
+import '../walk/models.dart';
+import '../auth/viewmodels.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
+import 'dart:async';
 
 class SocialScreen extends StatefulWidget {
   const SocialScreen({super.key});
@@ -13,24 +22,104 @@ class SocialScreen extends StatefulWidget {
 
 class _SocialScreenState extends State<SocialScreen> {
   final _searchCtrl = TextEditingController();
+  final FocusNode _searchFocus = FocusNode(); // 검색창 포커스 감지용
+  GoogleMapController? _mapController;
+  final bool _isFocused = false;
+  UserModel? _selectedUser; // 마커 클릭 시 선택된 유저 정보 저장
+  Timer? _mapInactivityTimer;      // 지도 비활성 타이머 관련 에러 해결
+  bool _isUserInteracting = false; // 사용자 상호작용 감지 에러 해결
+  bool _isSearchBarFocused = false; // 87번 라인 _isSearchBarFocused 에러 해결
 
   @override
   void initState() {
     super.initState();
+    // [수정] FocusNode 리스너 등록: 검색창 클릭 시 상태 반영을 위해 필수
+    _searchFocus.addListener(_onSearchFocusChange);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<SocialViewModel>().fetchUsers();
+      final socialVM = context.read<SocialViewModel>();
+      final authVM = context.read<AuthViewModel>();
+
+      socialVM.fetchUsers();
+      // 진입 시 내 프로필 마커 생성
+      socialVM.createProfileMarker(authVM.userModel?.profileImageUrl);
     });
+  }
+
+  // [추가] image_6b6b84.png 34번 라인에서 참조하는 메서드 정의
+  void _onSearchFocusChange() {
+    setState(() {
+      _isSearchBarFocused = _searchFocus.hasFocus;
+    });
+  }
+
+  // [수정] 상호작용 종료 시 5초 후 복귀 타이머 작동
+   void _onInteractionStarted() {
+    if (!_isUserInteracting) {
+      setState(() {
+        _isUserInteracting = true;
+      });
+    }
+    _mapInactivityTimer?.cancel();
   }
 
   @override
   void dispose() {
+    // [수정] 리스너 해제: 메모리 누수 방지
+    _searchFocus.removeListener(_onSearchFocusChange);
+
     _searchCtrl.dispose();
+    _searchFocus.dispose();
+    _mapInactivityTimer?.cancel(); // [추가] 타이머 해제
     super.dispose();
+  }
+
+// [추가] 조작 종료 후 5초 대기 후 중심 이동
+  void _onInteractionEnded() {
+    setState(() {
+      _isUserInteracting = false;
+    });
+    _mapInactivityTimer?.cancel();
+    _mapInactivityTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted && !_isUserInteracting && !_isSearchBarFocused) {
+        _moveToMyLocation();
+      }
+    });
+  }
+
+// [추가] 지도를 내 현재 위치로 이동
+  Future<void> _moveToMyLocation() async {
+    if (_mapController == null) return;
+    try {
+      Position pos = await Geolocator.getCurrentPosition();
+      await _mapController!.animateCamera(
+          CameraUpdate.newCameraPosition(
+              CameraPosition(
+                target: LatLng(pos.latitude, pos.longitude),
+                zoom: 16.5, // 산책 기능과 동일한 비율 적용
+              ),
+          ),
+      );
+    } catch (e) {
+      debugPrint("지도 중심 이동 실패: $e");
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+
+    bool isListMode = _isSearchBarFocused || _searchCtrl.text.isNotEmpty;
     final socialVM = context.watch<SocialViewModel>();
+    final authVM = context.watch<AuthViewModel>(); // AuthViewModel 감시 추가
+    // 검색 중이거나 검색창에 포커스가 있는 경우 리스트 모드
+    // [추가] 프로필 사진 변경 감지 및 자동 갱신 트리거
+    // Auth의 사진 URL과 Social의 마커 생성용 URL이 다르면 갱신 실행
+    final currentPhotoUrl = authVM.userModel?.profileImageUrl;
+    if (currentPhotoUrl != socialVM.currentMarkerUrl) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        socialVM.createProfileMarker(currentPhotoUrl);
+      });
+    }
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -45,57 +134,42 @@ class _SocialScreenState extends State<SocialScreen> {
       ),
       body: Column(
         children: [
+          // 검색창 영역
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: TextField(
               controller: _searchCtrl,
+              focusNode: _searchFocus,
               decoration: InputDecoration(
                 hintText: "닉네임 검색",
-                prefixIcon: const Icon(Icons.search),
+                prefixIcon: const Icon(Icons.search, color: Color(0xFF4CAF50)),
                 filled: true,
                 fillColor: Colors.grey[100],
-                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(30),
-                  borderSide: BorderSide.none,
-                ),
-                suffixIcon: _searchCtrl.text.isNotEmpty
+                    borderRadius: BorderRadius.circular(30),
+                    borderSide: BorderSide.none),
+                suffixIcon: _searchCtrl.text.isNotEmpty || _isFocused
                     ? IconButton(
                   icon: const Icon(Icons.clear),
                   onPressed: () {
                     _searchCtrl.clear();
+                    _searchFocus.unfocus();
                     context.read<SocialViewModel>().searchUsers('');
-                    FocusScope.of(context).unfocus();
                   },
                 )
                     : null,
               ),
-              onChanged: (val) {
-                context.read<SocialViewModel>().searchUsers(val);
-                setState(() {});
-              },
+              onChanged: (val) =>
+                  context.read<SocialViewModel>().searchUsers(val),
             ),
           ),
           Expanded(
-            child: socialVM.isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : socialVM.users.isEmpty
-                ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Icon(Icons.person_off, size: 48, color: Colors.grey),
-                  SizedBox(height: 10),
-                  Text("검색 결과가 없습니다.", style: TextStyle(color: Colors.grey)),
-                ],
-              ),
-            )
-                : ListView.builder(
-              itemCount: socialVM.users.length,
-              itemBuilder: (context, index) {
-                final user = socialVM.users[index];
-                return _buildUserTile(context, user, socialVM);
-              },
+            child: isListMode
+                ? _buildUserList(socialVM)
+                : Listener(
+              onPointerDown: (_) => _onInteractionStarted(),
+              onPointerUp: (_) => _onInteractionEnded(),
+              child: _buildMapView(socialVM),
             ),
           ),
         ],
@@ -103,7 +177,141 @@ class _SocialScreenState extends State<SocialScreen> {
     );
   }
 
-  Widget _buildUserTile(BuildContext context, UserModel user, SocialViewModel vm) {
+  // 기능 1: 지도 뷰 (기본 상태)
+  Widget _buildMapView(SocialViewModel vm) {
+    return FutureBuilder<Position>(
+      future: Geolocator.getCurrentPosition(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+
+       final myLatLng = LatLng(snapshot.data!.latitude, snapshot.data!.longitude);
+
+        return Stack(
+          children: [
+            GoogleMap(
+              initialCameraPosition: CameraPosition(target: myLatLng, zoom: 15),
+              onMapCreated: (controller) => _mapController = controller,
+              // [수정] 지도의 기본 UI 버튼들 제거 (커스텀 버튼과 겹침 방지)
+              myLocationEnabled: false,      // 파란 점 제거 (프로필 마커로 대체)
+              myLocationButtonEnabled: false, // 기본 내 위치 버튼 제거
+              mapToolbarEnabled: false,      // 하단 길찾기/맵 버튼 제거 (image_86a5d4 해결)
+              zoomControlsEnabled: false,    // +/- 버튼 제거
+              circles: {
+                Circle(
+                  circleId: const CircleId("nearby_range"),
+                  center: myLatLng,
+                  radius: 1000, // 1km
+                  fillColor: const Color(0xFFFF9800).withOpacity(0.1),
+                  strokeColor: const Color(0xFFFF9800).withOpacity(0.4),
+                  strokeWidth: 1,
+                ),
+              },
+              // [수정] 커스텀 마커 적용 및 클릭 이벤트
+              markers: {
+                // 1번 요청: 내 위치를 프로필 사진 마커로 표시
+                Marker(
+                  markerId: const MarkerId("my_profile_marker"),
+                  position: myLatLng,
+                  icon: vm.myProfileIcon ?? BitmapDescriptor.defaultMarker,
+                  anchor: const Offset(0.5, 0.5), // 마커 중심 정렬
+                ),
+                // 주변 유저 마커들...
+                ...vm.nearbyUsers.map((user) {
+                  final pos = user.position;
+                  return Marker(
+                    markerId: MarkerId(user.uid),
+                    position: LatLng(pos?.latitude ?? 0.0, pos?.longitude ?? 0.0),
+                    // 해당 유저의 생성된 마커 아이콘 적용, 없으면 기본 마커
+                    icon: vm.nearbyMarkers[user.uid] ?? BitmapDescriptor.defaultMarker,
+                    onTap: () {
+                      _onInteractionStarted();
+                      setState(() => _selectedUser = user);
+                    },
+                  );
+                }),
+              },
+              // 지도 조작 감지 (4번 요청 관련)
+              onCameraMoveStarted: () => _onInteractionStarted(),
+              onTap: (_) => setState(() => _selectedUser = null),
+            ),
+
+            // 5번 요청: 현재 위치로 이동하는 플로팅 버튼
+            Positioned(
+              bottom: _selectedUser != null ? 180 : 40,
+              right: 20,
+              child: FloatingActionButton(
+                mini: true,
+                backgroundColor: Colors.white,
+                onPressed: _moveToMyLocation,
+                child: const Icon(Icons.my_location, color: Color(0xFF4CAF50)),
+              ),
+            ),
+
+            // [추가] 마커 클릭 시 나타나는 정보 상자 (image_6af28c.png 스타일)
+            if (_selectedUser != null)
+              Positioned(
+                bottom: 30, left: 20, right: 20,
+                child: _buildUserMiniCard(_selectedUser!),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  // [추가] 유저 정보 미니 카드 위젯 (이미지 우측 닉네임/소개/버튼 구조)
+  Widget _buildUserMiniCard(UserModel user) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFF9800), // 주황색 배경
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10)],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 30,
+            backgroundImage: (user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty)
+                ? NetworkImage(user.profileImageUrl!) : null,
+            child: (user.profileImageUrl == null || user.profileImageUrl!.isEmpty)
+                ? const Icon(Icons.person) : null,
+          ),
+          const SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(user.nickname, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                Text(user.bio ?? "좋은 하루!", style: const TextStyle(color: Colors.white, fontSize: 14)),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => OtherUserProfileView(user: user))),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+            child: const Text("프로필", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 기능 2: 사용자 리스트 (검색창 클릭/입력 시)
+  Widget _buildUserList(SocialViewModel vm) {
+    if (vm.isLoading) return const Center(child: CircularProgressIndicator());
+    if (vm.users.isEmpty) {
+      return Center(child: Text(_searchCtrl.text.isEmpty ? "팔로우한 사용자가 없습니다." : "검색 결과가 없습니다."));
+    }
+    return ListView.builder(
+      itemCount: vm.users.length,
+      itemBuilder: (context, index) => _buildUserTile(context, vm.users[index], vm),
+    );
+  }
+
+  Widget _buildUserTile(BuildContext context, UserModel user,
+      SocialViewModel vm) {
     final isFollowing = vm.isFollowing(user.uid);
 
     return ListTile(
@@ -111,7 +319,8 @@ class _SocialScreenState extends State<SocialScreen> {
       leading: CircleAvatar(
         radius: 24,
         backgroundColor: Colors.grey[300],
-        backgroundImage: user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty
+        backgroundImage: user.profileImageUrl != null &&
+            user.profileImageUrl!.isNotEmpty
             ? NetworkImage(user.profileImageUrl!)
             : null,
         child: (user.profileImageUrl == null || user.profileImageUrl!.isEmpty)
@@ -140,10 +349,12 @@ class _SocialScreenState extends State<SocialScreen> {
           }
         },
         style: ElevatedButton.styleFrom(
-          backgroundColor: isFollowing ? Colors.grey[200] : Colors.amber,
+          backgroundColor: isFollowing ? Colors.grey[200] : const Color(
+              0xFFFF9800),
           foregroundColor: isFollowing ? Colors.black87 : Colors.white,
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20)),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         ),
         child: Text(
@@ -163,21 +374,88 @@ class _SocialScreenState extends State<SocialScreen> {
   }
 }
 
-class OtherUserProfileView extends StatelessWidget {
+class OtherUserProfileView extends StatefulWidget {
   final UserModel user;
 
   const OtherUserProfileView({super.key, required this.user});
 
   @override
+  State<OtherUserProfileView> createState() => _OtherUserProfileViewState();
+}
+
+class _OtherUserProfileViewState extends State<OtherUserProfileView> {
+  UserModel? _latestUser;
+  bool _isMeFollowingTarget = false;
+  bool _isTargetFollowingMe = false;
+  bool _isLoadingInfo = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshAll();
+  }
+
+  Future<void> _refreshAll() async {
+    setState(() => _isLoadingInfo = true);
+    final myUid = FirebaseAuth.instance.currentUser?.uid;
+    if (myUid == null) return;
+
+    try {
+      // 1. 최신 유저 정보 및 팔로우 관계 확인
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(
+          widget.user.uid).get();
+      final followingMeMeDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.user.uid)
+          .collection('following')
+          .doc(myUid)
+          .get();
+
+      if (mounted) {
+        setState(() {
+          if (userDoc.exists) _latestUser = UserModel.fromDocument(userDoc);
+          _isTargetFollowingMe = followingMeMeDoc.exists;
+          _isMeFollowingTarget =
+              context.read<SocialViewModel>().isFollowing(widget.user.uid);
+          _isLoadingInfo = false;
+        });
+      }
+
+      // 2. 피드 데이터 로드
+      await context.read<ProfileViewModel>().fetchOtherUserWalks(
+          widget.user.uid);
+    } catch (e) {
+      debugPrint("정보 로드 실패: $e");
+      if (mounted) setState(() => _isLoadingInfo = false);
+    }
+  }
+
+  bool _canSeeFeed() {
+    if (_latestUser == null) return false;
+    final visibility = _latestUser!.visibility;
+
+    if (visibility == 'all') return true;
+    if (visibility == 'friends') {
+      // 친구 관계: 서로 팔로우
+      return _isMeFollowingTarget && _isTargetFollowingMe;
+    }
+    return false; // visibility == 'none'
+  }
+
+  @override
   Widget build(BuildContext context) {
     final socialVM = context.watch<SocialViewModel>();
-    final isFollowing = socialVM.isFollowing(user.uid);
+    final profileVM = context.watch<ProfileViewModel>();
+    final userToShow = _latestUser ?? widget.user;
+    final isFollowing = socialVM.isFollowing(userToShow.uid);
+    // [수정] 검색창에 포커스가 있거나 검색어가 입력된 경우 리스트 모드 활성화
 
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text("${user.nickname}님의 프로필",
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Text("${userToShow.nickname}님의 프로필",
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF4CAF50),
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -191,6 +469,7 @@ class OtherUserProfileView extends StatelessWidget {
       ),
       body: Column(
         children: [
+          // 상단 프로필 영역
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 35, 15, 25),
             child: Row(
@@ -198,10 +477,12 @@ class OtherUserProfileView extends StatelessWidget {
                 CircleAvatar(
                   radius: 45,
                   backgroundColor: Colors.grey[200],
-                  backgroundImage: (user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty)
-                      ? NetworkImage(user.profileImageUrl!)
+                  backgroundImage: (userToShow.profileImageUrl != null &&
+                      userToShow.profileImageUrl!.isNotEmpty)
+                      ? NetworkImage(userToShow.profileImageUrl!)
                       : null,
-                  child: (user.profileImageUrl == null || user.profileImageUrl!.isEmpty)
+                  child: (userToShow.profileImageUrl == null ||
+                      userToShow.profileImageUrl!.isEmpty)
                       ? const Icon(Icons.person, size: 45, color: Colors.white)
                       : null,
                 ),
@@ -210,27 +491,39 @@ class OtherUserProfileView extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(user.nickname,
-                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text(user.bio ?? "안녕하세요!",
-                          style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                      const SizedBox(height: 8),
+                      Text(userToShow.nickname,
+                          style: const TextStyle(
+                              fontSize: 20, fontWeight: FontWeight.bold)),
+                      if (userToShow.bio != null &&
+                          userToShow.bio!.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(userToShow.bio!,
+                            style: const TextStyle(color: Colors.grey,
+                                fontSize: 13)),
+                      ],
+                      const SizedBox(height: 12),
                       UserStatsRow(
-                        userId: user.uid,
-                        postCount: user.stats.postCount,
-                        followingCount: user.stats.followingCount,
-                        followerCount: user.stats.followerCount,
+                        userId: userToShow.uid,
+                        postCount: profileVM.otherUserWalkRecords.length,
+                        followingCount: userToShow.stats.followingCount,
+                        followerCount: userToShow.stats.followerCount,
                       ),
                     ],
                   ),
                 ),
                 ElevatedButton(
-                  onPressed: () => socialVM.toggleFollow(user.uid),
+                  onPressed: () async {
+                    await socialVM.toggleFollow(userToShow.uid);
+                    _refreshAll();
+                  },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: isFollowing ? Colors.grey[300] : Colors.amber,
-                    foregroundColor: isFollowing ? Colors.black87 : Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    backgroundColor: isFollowing
+                        ? Colors.grey[300]
+                        : const Color(0xFFFF9800),
+                    foregroundColor: isFollowing ? Colors.black87 : Colors
+                        .white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
                   ),
                   child: Text(isFollowing ? "팔로잉" : "팔로우",
                       style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -238,10 +531,51 @@ class OtherUserProfileView extends StatelessWidget {
               ],
             ),
           ),
-          const Divider(),
-          const Expanded(
-            child: Center(
-              child: Text("기능 준비 중입니다.", style: TextStyle(color: Colors.grey)),
+          const Divider(height: 1),
+
+          // 피드 영역 (공개 범위에 따른 처리)
+          Expanded(
+            child: _isLoadingInfo
+                ? const Center(child: CircularProgressIndicator())
+                : !_canSeeFeed()
+                ? _buildLockedScreen(userToShow.visibility)
+                : profileVM.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : profileVM.otherUserWalkRecords.isEmpty
+                ? const Center(child: Text(
+                "아직 산책 기록이 없습니다.", style: TextStyle(color: Colors.grey)))
+                : GridView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: profileVM.otherUserWalkRecords.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+              ),
+              itemBuilder: (context, index) {
+                final walk = profileVM.otherUserWalkRecords[index];
+                final photoUrl = walk.photoUrls.isNotEmpty
+                    ? walk.photoUrls[0]
+                    : null;
+                return GestureDetector(
+                  onTap: () => _showWalkDetail(context, walk),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [BoxShadow(
+                          color: Colors.black.withOpacity(0.05), blurRadius: 5)
+                      ],
+                    ),
+                    child: photoUrl != null
+                        ? ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(photoUrl, fit: BoxFit.cover),
+                    )
+                        : const Icon(Icons.directions_walk, color: Colors.grey),
+                  ),
+                );
+              },
             ),
           ),
         ],
@@ -249,29 +583,361 @@ class OtherUserProfileView extends StatelessWidget {
     );
   }
 
-  void _showBlockDialog(BuildContext context, SocialViewModel vm) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("사용자 차단"),
-        content: Text("${user.nickname}님을 차단하시겠습니까?\n차단하면 검색 결과에 나타나지 않으며 팔로우가 해제됩니다."),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("취소")),
-          TextButton(
-            onPressed: () async {
-              await vm.toggleBlock(user.uid);
-              if (context.mounted) {
-                Navigator.pop(ctx);
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("차단되었습니다.")),
-                );
-              }
-            },
-            child: const Text("차단", style: TextStyle(color: Colors.red)),
+  Widget _buildLockedScreen(String visibility) {
+    String message = "비공개 프로필입니다.";
+    IconData icon = Icons.lock_outline;
+
+    if (visibility == 'friends') {
+      message = "서로 팔로우한 친구에게만\n공개된 피드입니다.";
+      icon = Icons.people_outline;
+    }
+
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 64, color: Colors.grey[300]),
+          const SizedBox(height: 16),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                color: Colors.grey[500], fontSize: 16, height: 1.5),
           ),
         ],
       ),
+    );
+  }
+
+  void _showWalkDetail(BuildContext context, WalkRecordModel walk) {
+    final dateStr = DateFormat('yyyy년 MM월 d일').format(walk.startTime.toDate());
+    final timeStr = DateFormat('HH:mm').format(walk.startTime.toDate());
+    final timeEnd = DateFormat('HH:mm').format(walk.endTime.toDate());
+
+    // 시, 분, 초 계산
+    final hours = walk.duration ~/ 3600;
+    final minutes = (walk.duration % 3600) ~/ 60;
+    final seconds = walk.duration % 60;
+
+    final durationText = hours > 0
+        ? "${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(
+        2, '0')}:${seconds.toString().padLeft(2, '0')}"
+        : "${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(
+        2, '0')}";
+
+    final durationUnit = hours > 0 ? "시:분:초" : "분:초";
+
+    // 내 닉네임 가져오기 (알림용)
+    final myProfile = context.read<AuthViewModel>().userModel;
+    final myUid = FirebaseAuth.instance.currentUser?.uid;
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        // 다이얼로그 내부에서 사진 인덱스 상태를 관리하기 위한 변수
+        int currentImageIndex = 0;
+
+        // StatefulBuilder를 사용하여 다이얼로그 내부의 상태(인디케이터)만 갱신합니다.
+        return StatefulBuilder(
+            builder: (context, setStateInsideDialog) {
+              return Dialog(
+                  backgroundColor: Colors.transparent,
+                  child: Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // 헤더
+                          Container(
+                            padding: const EdgeInsets.fromLTRB(25, 20, 15, 10),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(dateStr, style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF2C3E50))),
+                                    Text("$timeStr ~ $timeEnd 산책 완료 ✨",
+                                        style: const TextStyle(fontSize: 14,
+                                            color: Color(0xFF4CAF50),
+                                            fontWeight: FontWeight.w600)),
+                                  ],
+                                ),
+                                IconButton(onPressed: () => Navigator.pop(ctx),
+                                    icon: const Icon(
+                                        Icons.close, color: Colors.grey)),
+                              ],
+                            ),
+                          ),
+
+                          // 이미지
+                          if (walk.photoUrls.isNotEmpty)
+                          // [수정] 컬럼으로 감싸서 인디케이터를 아래에 배치
+                            Column(
+                              children: [
+                                Container(
+                                  height: 280,
+                                  margin: const EdgeInsets.symmetric(
+                                      horizontal: 20),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: PageView.builder(
+                                      itemCount: walk.photoUrls.length,
+                                      // [추가] 페이지 변경 시 인덱스 업데이트
+                                      onPageChanged: (index) {
+                                        setStateInsideDialog(() {
+                                          currentImageIndex = index;
+                                        });
+                                      },
+                                      itemBuilder: (context, index) =>
+                                          Image.network(walk.photoUrls[index],
+                                              fit: BoxFit.cover),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                // [추가] 기능 2: 인디케이터 표시
+                                _buildIndicator(
+                                    walk.photoUrls.length, currentImageIndex),
+                              ],
+                            )
+                          else
+                            Container(
+                              height: 180,
+                              margin: const EdgeInsets.symmetric(
+                                  horizontal: 20),
+                              decoration: BoxDecoration(
+                                  color: const Color(0xFFFFF9C4).withOpacity(
+                                      0.5),
+                                  borderRadius: BorderRadius.circular(20)),
+                              child: const Icon(Icons.pets, size: 60,
+                                  color: Color(0xFFFFC107)),
+                            ),
+
+                          // 함께한 펫 (태그)
+                          // Note: OtherUserProfileView에서는 상대방의 펫 정보 리스트를 직접 가지고 있지 않으므로
+                          // 간단하게 아이콘과 텍스트로 대체하거나 추후 보강 가능
+                          if (walk.petIds.isNotEmpty)
+                          // 인디케이터가 생겨서 상단 패딩 약간 조정 (15 -> 10)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 10, 20, 5),
+                              child: Wrap(
+                                spacing: 8,
+                                children: walk.petIds.map((id) =>
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                          color: const Color(0xFFE8F5E9),
+                                          borderRadius: BorderRadius.circular(
+                                              15)),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: const [
+                                          Icon(Icons.pets, size: 14,
+                                              color: Color(0xFF2E7D32)),
+                                          SizedBox(width: 6),
+                                          Text("함께한 친구", style: TextStyle(
+                                              fontSize: 12,
+                                              color: Color(0xFF2E7D32),
+                                              fontWeight: FontWeight.bold)),
+                                        ],
+                                      ),
+                                    )).toList(),
+                              ),
+                            ),
+
+                          // 데이터 카드
+                          Container(
+                            margin: const EdgeInsets.all(20),
+                            padding: const EdgeInsets.symmetric(vertical: 20),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF8E1),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                  color: const Color(0xFFFFD54F).withOpacity(
+                                      0.5)),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: [
+                                _buildLuxStatItem(Icons.straighten_rounded,
+                                    walk.distance.toStringAsFixed(2), "km",
+                                    const Color(0xFF4CAF50)),
+                                _buildLuxStatItem(
+                                    Icons.access_time_rounded, durationText,
+                                    durationUnit, const Color(0xFFFF9800)),
+                                _buildLuxStatItem(
+                                    Icons.local_fire_department_rounded,
+                                    "${walk.calories.toInt()}", "kcal",
+                                    const Color(0xFFE53935)),
+                              ],
+                            ),
+                          ),
+
+                          // 기록 한 줄 + 좋아요 버튼 영역
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(25, 10, 25, 25),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(walk.emoji.isNotEmpty ? walk.emoji : "🐕", style: const TextStyle(fontSize: 24)),
+                                    const SizedBox(width: 10),
+                                    const Text("기록 한 줄", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF34495E))),
+                                    const Spacer(),
+
+                                    // 좋아요 버튼 (StreamBuilder로 실시간 상태 확인)
+                                    StreamBuilder<DocumentSnapshot>(
+                                      stream: FirebaseFirestore.instance
+                                          .collection('walks')
+                                          .doc(walk.id)
+                                          .collection('likes')
+                                          .doc(myUid)
+                                          .snapshots(),
+                                      builder: (context, snapshot) {
+                                        final isLiked = snapshot.hasData &&
+                                            snapshot.data!.exists;
+                                        return IconButton(
+                                          onPressed: () async {
+                                            await context.read<
+                                                SocialViewModel>().toggleLike(
+                                              walkId: walk.id ?? "",
+                                              ownerId: walk.userId,
+                                              myNickname: myProfile?.nickname ??
+                                                  "익명",
+                                            );
+                                            if (context.mounted) {
+                                              ScaffoldMessenger
+                                                  .of(context)
+                                                  .showSnackBar(
+                                                SnackBar(
+                                                  content: Text(isLiked
+                                                      ? "좋아요를 취소했습니다."
+                                                      : "이 기록을 좋아합니다! ❤️"),
+                                                  duration: const Duration(
+                                                      seconds: 1),
+                                                ),
+                                              );
+                                            }
+                                          },
+                                          icon: Icon(
+                                            isLiked ? Icons.favorite : Icons
+                                                .favorite_border,
+                                            color: isLiked ? Colors.red : Colors
+                                                .grey,
+                                            size: 28,
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  walk.memo.isNotEmpty
+                                      ? walk.memo
+                                      : "산책 기록이 없습니다.",
+                                  style: const TextStyle(fontSize: 15,
+                                      height: 1.6,
+                                      color: Color(0xFF5D6D7E)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ));
+            }
+        );
+      },
+    );
+  }
+
+  // [추가] 기능 2: 인디케이터 빌드 메서드 (제공해주신 코드 수정)
+  Widget _buildIndicator(int totalCount, int currentIndex) {
+    // 사진이 1장 이하일 때는 인디케이터를 표시하지 않음
+    if (totalCount <= 1) return const SizedBox.shrink();
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(totalCount, (index) {
+        bool isSelected = index == currentIndex;
+
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          width: isSelected ? 16 : 8,
+          // 선택되면 약간 넓어지는 효과
+          height: 8,
+          decoration: BoxDecoration(
+            // 앱 테마색(초록색) 적용, 선택 안된건 회색
+            color: isSelected ? const Color(0xFF4CAF50) : Colors.grey.shade300,
+            borderRadius: BorderRadius.circular(4), // 동그라미 대신 둥근 사각형 형태로 변경 (취향에 따라 BoxShape.circle로 변경 가능)
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildLuxStatItem(IconData icon, String value, String unit,
+      Color color) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+              color: color.withOpacity(0.1), shape: BoxShape.circle),
+          child: Icon(icon, color: color, size: 22),
+        ),
+        const SizedBox(height: 8),
+        Text(value, style: const TextStyle(fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF2C3E50))),
+        Text(unit, style: const TextStyle(
+            fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+
+  void _showBlockDialog(BuildContext context, SocialViewModel vm) {
+    showDialog(
+      context: context,
+      builder: (ctx) =>
+          AlertDialog(
+            title: const Text("사용자 차단"),
+            content: Text("${widget.user
+                .nickname}님을 차단하시겠습니까?\n차단하면 검색 결과에 나타나지 않으며 팔로우가 해제됩니다."),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx), child: const Text("취소")),
+              TextButton(
+                onPressed: () async {
+                  await vm.toggleBlock(widget.user.uid);
+                  if (context.mounted) {
+                    Navigator.pop(ctx);
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("차단되었습니다.")),
+                    );
+                  }
+                },
+                child: const Text("차단", style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
     );
   }
 }
@@ -295,40 +961,44 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
   @override
   Widget build(BuildContext context) {
     final socialVM = context.watch<SocialViewModel>();
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("차단된 계정", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text("차단된 계정",
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF4CAF50),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: socialVM.isLoading
           ? const Center(child: CircularProgressIndicator())
           : socialVM.blockedUserList.isEmpty
-              ? const Center(child: Text("차단된 계정이 없습니다.", style: TextStyle(color: Colors.grey)))
-              : ListView.builder(
-                  itemCount: socialVM.blockedUserList.length,
-                  itemBuilder: (context, index) {
-                    final user = socialVM.blockedUserList[index];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundImage: (user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty)
-                            ? NetworkImage(user.profileImageUrl!)
-                            : null,
-                        child: (user.profileImageUrl == null || user.profileImageUrl!.isEmpty)
-                            ? const Icon(Icons.person)
-                            : null,
-                      ),
-                      title: Text(user.nickname, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      trailing: OutlinedButton(
-                        onPressed: () => socialVM.unblockUser(user.uid),
-                        style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-                        child: const Text("차단 해제"),
-                      ),
-                    );
-                  },
-                ),
+          ? const Center(
+          child: Text("차단된 계정이 없습니다.", style: TextStyle(color: Colors.grey)))
+          : ListView.builder(
+        itemCount: socialVM.blockedUserList.length,
+        itemBuilder: (context, index) {
+          final user = socialVM.blockedUserList[index];
+          return ListTile(
+            leading: CircleAvatar(
+              backgroundImage: (user.profileImageUrl != null &&
+                  user.profileImageUrl!.isNotEmpty)
+                  ? NetworkImage(user.profileImageUrl!)
+                  : null,
+              child: (user.profileImageUrl == null ||
+                  user.profileImageUrl!.isEmpty)
+                  ? const Icon(Icons.person)
+                  : null,
+            ),
+            title: Text(user.nickname,
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            trailing: OutlinedButton(
+              onPressed: () => socialVM.unblockUser(user.uid),
+              style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text("차단 해제"),
+            ),
+          );
+        },
+      ),
     );
   }
 }

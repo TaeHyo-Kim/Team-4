@@ -4,7 +4,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'viewmodels.dart';
-// widgets.dart import 제거함 (파일 내부에 포함)
 import 'package:intl/intl.dart'; // [해결] DateFormat 사용을 위해 필수
 import 'package:cloud_firestore/cloud_firestore.dart'; // Timestamp 사용을 위해 추가
 
@@ -34,6 +33,13 @@ class _WalkScreenState extends State<WalkScreen> {
       appBar: AppBar(
         key: const ValueKey('walk_appbar'),
         backgroundColor: const Color(0xFF4CAF50),
+        // 산책 중/요약/후기 단계에서만 취소 버튼 표시
+        leading: vm.walkState != 0
+            ? IconButton(
+          icon: const Icon(Icons.close, color: Colors.red, size: 28),
+          onPressed: () => _showExitConfirmationDialog(context, vm),
+        )
+            : null,
         title: const Text(
           "산책",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
@@ -44,6 +50,29 @@ class _WalkScreenState extends State<WalkScreen> {
         onPointerUp: (_) => vm.onUserInteractionEnded(),
         child: _buildBodyByState(vm),
       ),
+    );
+  }
+
+  // 산책 중단 확인 팝업
+  void _showExitConfirmationDialog(BuildContext context, WalkViewModel vm) {
+    showDialog(
+      context: context,
+      builder: (ctx) =>
+          AlertDialog(
+            title: const Text("산책 중단"),
+            content: const Text("산책을 그만두시겠습니까?\n기록이 저장되지 않습니다."),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx),
+                  child: const Text("아니요")),
+              TextButton(
+                onPressed: () {
+                  vm.cancelWalk(); // ViewModel에 정의한 초기화 로직 호출
+                  Navigator.pop(ctx);
+                },
+                child: const Text("예", style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
     );
   }
 
@@ -60,7 +89,7 @@ class _WalkScreenState extends State<WalkScreen> {
     }
   }
 
-  // [수정 부분 1] 홈 화면 (1번 사진 대응): 발바닥 아이콘 추가 및 최근 기록 레이아웃 최적화
+  // 발바닥 아이콘 추가 및 최근 기록 레이아웃 최적화
   Widget _buildHome(WalkViewModel vm) {
     return Stack(
       children: [
@@ -78,158 +107,160 @@ class _WalkScreenState extends State<WalkScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const SizedBox(height: 20), // 상단 여백 추가
-              const Text("오늘도 즐거운 산책 해보아용 >.<",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 20),
-              // 여러 반려동물 선택 체크박스
-              if (vm.myPets.isNotEmpty)
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 20),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.9),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 10,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "산책할 반려동물 선택",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      ...vm.myPets.map((pet) {
-                        final petId = pet['id'] as String? ?? '';
-                        final petName = pet['name'] as String? ?? '강아지';
-                        final isPrimary = pet['isPrimary'] == true;
-                        final isSelected = vm.isPetSelected(petId);
-                        
-                        return CheckboxListTile(
-                          value: isSelected,
-                          onChanged: (value) => vm.togglePetSelection(petId),
-                          title: Row(
-                            children: [
-                              Text(
-                                petName,
-                                style: const TextStyle(fontSize: 16),
-                              ),
-                              if (isPrimary) ...[
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFD700),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: const Text(
-                                    "대표",
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
+                  const Text("오늘도 즐거운 산책 해보아용 >.<",
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 20),
+                  // 여러 반려동물 선택 체크박스
+                  if (vm.myPets.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 20),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.9),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 10,
+                            spreadRadius: 2,
                           ),
-                          activeColor: const Color(0xFF4CAF50),
-                          contentPadding: EdgeInsets.zero,
-                        );
-                      }).toList(),
-                      if (vm.selectedPetIds.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 8),
-                          child: Text(
-                            "최소 1마리의 반려동물을 선택해주세요.",
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "산책할 반려동물 선택",
                             style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.red,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                ),
-              const SizedBox(height: 30),
-              // [수정] START 버튼에 발바닥 아이콘 추가
-              GestureDetector(
-                onTap: () async {
-                  // 선택된 반려동물이 없으면 경고
-                  if (vm.selectedPetIds.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("최소 1마리의 반려동물을 선택해주세요."),
-                        backgroundColor: Colors.red,
+                          const SizedBox(height: 12),
+                          ...vm.myPets.map((pet) {
+                            final petId = pet['id'] as String? ?? '';
+                            final petName = pet['name'] as String? ?? '강아지';
+                            final isPrimary = pet['isPrimary'] == true;
+                            final isSelected = vm.isPetSelected(petId);
+
+                            return CheckboxListTile(
+                              value: isSelected,
+                              onChanged: (value) =>
+                                  vm.togglePetSelection(petId),
+                              title: Row(
+                                children: [
+                                  Text(
+                                    petName,
+                                    style: const TextStyle(fontSize: 16),
+                                  ),
+                                  if (isPrimary) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFFD700),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text(
+                                        "대표",
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              activeColor: const Color(0xFF4CAF50),
+                              contentPadding: EdgeInsets.zero,
+                            );
+                          }),
+                          if (vm.selectedPetIds.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 8),
+                              child: Text(
+                                "최소 1마리의 반려동물을 선택해주세요.",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.red,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
-                    );
-                    return;
-                  }
-                  // [수정] 시작 시 사용자의 위치를 중심으로 잡아줌 [요구사항 3]
-                  try {
-                    await vm.startWalk(vm.selectedPetIds.toList());
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text("산책 시작 실패: ${e.toString()}"),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  }
-                },
-                child: Container(
-                  width: 200, height: 200,
-                  decoration: BoxDecoration(
-                      color: const Color(0xFFFF9800),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(color: Colors.orange.withOpacity(0.3),
-                            blurRadius: 15,
-                            spreadRadius: 5)
-                      ]
-                  ),
-                  child: const Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.pets, size: 60, color: Colors.white),
-                      // 발바닥 아이콘 복구
-                      SizedBox(height: 8),
-                      Text("START", style: TextStyle(color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 40),
-              // [수정] 최근 산책 기록 복구 [요구사항 2]
-              // [수정] 최근 산책 기록 표시 및 없을 경우 대사 표기 [요구사항 3]
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: vm.recentWalk != null
-                    ? _buildRecentWalkCard(vm)
-                    : const Center(
-                        child: Text("아직 산책 기록이 없어요.\n첫 산책을 시작해보세요!",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey)),
+                    ),
+                  const SizedBox(height: 30),
+                  // START 버튼에 발바닥 아이콘 추가
+                  GestureDetector(
+                    onTap: () async {
+                      // 선택된 반려동물이 없으면 경고
+                      if (vm.selectedPetIds.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("최소 1마리의 반려동물을 선택해주세요."),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      // 시작 시 사용자의 위치를 중심으로 잡아줌 [요구사항 3]
+                      try {
+                        await vm.startWalk(vm.selectedPetIds.toList());
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text("산책 시작 실패: ${e.toString()}"),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    child: Container(
+                      width: 200, height: 200,
+                      decoration: BoxDecoration(
+                          color: const Color(0xFFFF9800),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(color: Colors.orange.withOpacity(0.3),
+                                blurRadius: 15,
+                                spreadRadius: 5)
+                          ]
                       ),
-              ),
-              const SizedBox(height: 40), // 하단 여백 추가
+                      child: const Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.pets, size: 60, color: Colors.white),
+                          // 발바닥 아이콘 복구
+                          SizedBox(height: 8),
+                          Text("START", style: TextStyle(color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                  // 최근 산책 기록 복구
+                  // 최근 산책 기록 표시 및 없을 경우 대사 표기 [요구사항 3]
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: vm.recentWalk != null
+                        ? _buildRecentWalkCard(vm)
+                        : const Center(
+                      child: Text("아직 산책 기록이 없어요.\n첫 산책을 시작해보세요!",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey)),
+                    ),
+                  ),
+                  const SizedBox(height: 40), // 하단 여백 추가
                 ],
               ),
             ),
@@ -242,18 +273,18 @@ class _WalkScreenState extends State<WalkScreen> {
   // 최근 산책 기록 카드 위젯
   Widget _buildRecentWalkCard(WalkViewModel vm) {
     if (vm.recentWalk == null) return const SizedBox.shrink();
-    
+
     final walkData = vm.recentWalk!;
     final endTime = walkData['endTime'] as Timestamp?;
     final distance = walkData['distance'] as double? ?? 0.0;
     final duration = walkData['duration'] as int? ?? 0;
     final emoji = walkData['emoji'] as String? ?? '🐕';
-    
+
     String dateStr = '';
     if (endTime != null) {
       dateStr = DateFormat('yyyy년 MM월 dd일').format(endTime.toDate());
     }
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -326,16 +357,13 @@ class _WalkScreenState extends State<WalkScreen> {
     );
   }
 
-  // [수정] 요약 화면: 후기 작성하기 버튼 로직 수정
+  //  요약 화면: 후기 작성하기 버튼 로직 수정
   Widget _buildSummary(WalkViewModel vm) {
-    // 시간 포맷팅 (예: 14:30:05)
-    // DateFormat을 사용하여 에러 해결
-    String startTimeStr = vm.startTime != null
-        ? DateFormat('HH:mm:ss').format(vm.startTime!)
-        : "--:--";
-    String endTimeStr = vm.endTime != null
-        ? DateFormat('HH:mm:ss').format(vm.endTime!)
-        : "--:--";
+    String startTimeStr = vm.startTime != null ? DateFormat('HH:mm:ss').format(
+        vm.startTime!) : "--:--";
+    // 종료 버튼 누른 시점의 시간 표시 (vm.endTime 사용)
+    String endTimeStr = vm.endTime != null ? DateFormat('HH:mm:ss').format(
+        vm.endTime!) : "--:--";
 
     return Stack(
       children: [
@@ -344,22 +372,31 @@ class _WalkScreenState extends State<WalkScreen> {
           bottom: 40, left: 20, right: 20,
           child: Container(
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.black12)),
+            decoration: BoxDecoration(color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.black12)),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text("산책 완료! 🎉", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                Text("시간: $startTimeStr ~ $endTimeStr", style: const TextStyle(color: Colors.grey)),
-                Text("거리: ${(vm.distance / 1000).toStringAsFixed(1)}km / 소요: ${vm.seconds ~/ 60}분"),
+                const Text("산책 완료! 🎉", style: TextStyle(
+                    fontSize: 22, fontWeight: FontWeight.bold)),
+                Text("시간: $startTimeStr ~ $endTimeStr",
+                    style: const TextStyle(color: Colors.grey)),
+                Text(
+                    "거리: ${(vm.distance / 1000).toStringAsFixed(1)}km / 소요: ${vm
+                        .seconds ~/ 60}분 ${vm.seconds % 60}초"),
                 const SizedBox(height: 20),
                 Row(
-                  children: [
-                    Expanded(child: OutlinedButton(onPressed: () {}, child: const Text("지도 확인하기"))),
-                    const SizedBox(width: 10),
+                  children: [ // 지도 확인하기 삭제 및 버튼 스타일 수정
                     Expanded(child: ElevatedButton(
-                      onPressed: () => vm.setWalkState(3), // [수정] 후기 작성 상태(3)로 변경
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-                      child: const Text("후기 작성하기"),
+                      onPressed: () => vm.setWalkState(3),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white, // 글자색 흰색
+                      ),
+                      child: const Text(
+                          "후기 작성하기", style: TextStyle(fontWeight: FontWeight
+                          .bold)),
                     )),
                   ],
                 )
@@ -371,119 +408,80 @@ class _WalkScreenState extends State<WalkScreen> {
     );
   }
 
-  // [수정] 후기 작성 UI: 인디케이터 및 화살표 로직 강화
-  // [수정] 후기 작성 UI: 화살표 외부 배치, 텍스트 필드, 이모지 선택 효과 추가
+  // 후기 작성 UI: 인디케이터 및 화살표 로직 강화, 텍스트 필드, 이모지 선택 효과 추가
   Widget _buildReview(WalkViewModel vm) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         children: [
-          const SizedBox(height: 40),
+          const SizedBox(height: 20),
           const Text("오늘의 산책은 어떠셨나요?",
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
 
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // 왼쪽 화살표
               IconButton(
-                icon: const Icon(Icons.arrow_back_ios, size: 30),
-                onPressed: vm.currentImageIndex > 0
-                    ? () => vm.setCurrentImageIndexDecrement()
-                    : null,
-                color: vm.currentImageIndex > 0 ? Colors.black : Colors.grey.withOpacity(0.3),
+                icon: const Icon(Icons.arrow_back_ios),
+                onPressed: () => vm.movePage(-1), // PageView 이동
               ),
-
-              // [수정 핵심] 사진 유무와 상관없이 동일한 크기를 유지하는 영역
               Expanded(
                 child: AspectRatio(
-                  aspectRatio: 1, // 1:1 비율(정사각형) 강제 유지
+                  aspectRatio: 1,
                   child: Container(
-                    // [추가] 내부 콘텐츠(아이콘 등)를 중앙에 배치하여 크기 변화 방지
-                    alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade50, // 빈 영역 배경색 (선택 사항)
                       border: Border.all(color: Colors.grey.shade300),
                       borderRadius: BorderRadius.circular(15),
                     ),
-                    // Stack을 사용하여 사진과 삭제 버튼(X)을 겹침
-                    child: Stack(
-                      alignment: Alignment.center, // Stack 내부 요소들도 중앙 정렬
-                      children: [
-                        // 사진이 없을 때 표시되는 아이콘 (Container 크기를 꽉 채우게 됨)
-                        if (vm.reviewImages.isEmpty)
-                          const Icon(Icons.image_not_supported, size: 80, color: Colors.grey)
-
-                        // 사진이 있을 때 표시되는 이미지
-                        else
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(15),
-                            child: Image.file(
-                              File(vm.reviewImages[vm.currentImageIndex].path),
-                              fit: BoxFit.cover,
-                              width: double.infinity, // 부모(Container) 너비에 맞춤
-                              height: double.infinity, // 부모(Container) 높이에 맞춤
+                    child: PageView.builder(
+                      controller: vm.pageController,
+                      onPageChanged: vm.onPageChanged,
+                      itemCount: vm.reviewImages.isEmpty ? 1 : vm.reviewImages
+                          .length,
+                      itemBuilder: (context, index) {
+                        if (vm.reviewImages.isEmpty) {
+                          return const Icon(Icons.image_not_supported, size: 80,
+                              color: Colors.grey);
+                        }
+                        return Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(15),
+                              child: Image.file(
+                                  File(vm.reviewImages[index].path),
+                                  fit: BoxFit.cover),
                             ),
-                          ),
-
-                        // 삭제 버튼 (사진이 있을 때만 표시)
-                        if (vm.reviewImages.isNotEmpty)
-                          Positioned(
-                            top: 10,
-                            right: 10,
-                            child: GestureDetector(
-                              onTap: () => vm.removeImage(vm.currentImageIndex),
-                              child: Container(
-                                decoration: const BoxDecoration(
-                                  color: Colors.black54,
-                                  shape: BoxShape.circle,
+                            Positioned(
+                              top: 10, right: 10,
+                              child: GestureDetector(
+                                onTap: () => vm.removeImage(index),
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                      color: Colors.black54,
+                                      shape: BoxShape.circle),
+                                  child: const Icon(
+                                      Icons.close, color: Colors.white,
+                                      size: 20),
                                 ),
-                                child: const Icon(Icons.close, color: Colors.white, size: 20),
                               ),
-                            ),
-                          ),
-                      ],
+                            )
+                          ],
+                        );
+                      },
                     ),
                   ),
                 ),
               ),
-
-              // 오른쪽 화살표
               IconButton(
-                icon: const Icon(Icons.arrow_forward_ios, size: 30),
-                onPressed: vm.currentImageIndex < vm.reviewImages.length - 1
-                    ? () => vm.setCurrentImageIndexIncrement()
-                    : null,
-                color: vm.currentImageIndex < vm.reviewImages.length - 1
-                    ? Colors.black
-                    : Colors.grey.withOpacity(0.3),
+                icon: const Icon(Icons.arrow_forward_ios),
+                onPressed: () => vm.movePage(1),
               ),
             ],
           ),
-
           const SizedBox(height: 10),
-
-          // [요구사항 2] 인디케이터 (제한 없이 모든 사진 표기)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(vm.totalDots, (index) {
-              Color dotColor = Colors.white;
-              if (vm.reviewImages.isNotEmpty) {
-                dotColor = (index == vm.currentImageIndex) ? Colors.black : Colors.grey;
-              }
-              return Container(
-                margin: const EdgeInsets.all(5),
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: dotColor,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.black26),
-                ),
-              );
-            }),
-          ),
+          _buildIndicator(vm), // [수정 7] 사진 바로 아래에만 표시 (최하단 호출 삭제)
           const SizedBox(height: 20),
 
           // [요구사항 4] 텍스트 유지 기능을 위한 TextField
@@ -497,31 +495,58 @@ class _WalkScreenState extends State<WalkScreen> {
             },
             decoration: InputDecoration(
               hintText: "산책 후기를 남겨주세요...",
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
           ),
           const SizedBox(height: 25),
 
-          // 이모지 선택 영역
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 12,
-            runSpacing: 12,
-            children: ['👍', '👌', '❤️', '💧', '👎', '🐕', '🐈', '🐶', '😊', '😍', '🥰', '😎', '🤗', '🎉', '✨', '🌟', '💪', '🏃', '🌳', '☀️'].map((e) => GestureDetector(
-              onTap: () => vm.setSelectedEmoji(e),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: vm.selectedEmoji == e ? Colors.orange.withOpacity(0.2) : Colors.transparent,
-                  border: Border.all(color: vm.selectedEmoji == e ? Colors.orange : Colors.transparent, width: 2),
-                ),
-                child: Text(e, style: const TextStyle(fontSize: 30)),
-              ),
-            )).toList(),
-          ),
-          const SizedBox(height: 30),
+          // 이모지 전체를 감싸는 하나의 블록 UI
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: Colors.grey.shade300),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ...vm.currentEmojiRow.map((e) =>
+                    GestureDetector(
+                      onTap: () => vm.setSelectedEmoji(e),
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          // 내가 선택한 이모지만 주황색 배경/테두리 강조
+                          color: vm.selectedEmoji == e ? Colors.orange
+                              .withOpacity(0.1) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: vm.selectedEmoji == e
+                              ? Colors.orange
+                              : Colors.transparent),
+                        ),
+                        child: Text(e, style: const TextStyle(fontSize: 24)),
+                      ),
+                    )),
 
+                // 구분선 및 드롭다운 버튼
+                Container(width: 1,
+                    height: 24,
+                    color: Colors.grey.shade300,
+                    margin: const EdgeInsets.symmetric(horizontal: 8)),
+                IconButton(
+                  onPressed: () => _showEmojiPicker(context, vm),
+                  icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                )
+              ],
+            ),
+          ),
+          const SizedBox(height: 40),
           // 하단 액션 버튼
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -532,21 +557,85 @@ class _WalkScreenState extends State<WalkScreen> {
               ),
               const SizedBox(width: 20),
               ElevatedButton(
-                onPressed: () => vm.stopWalkAndSave(vm.reviewController.text),
+                onPressed: vm.isSaving ? null : () {
+                  // 1. 키보드 닫기
+                  FocusScope.of(context).unfocus();
+
+                  // 2. 산책 거리가 0인지 먼저 체크
+                  if (vm.distance == 0) {
+                    _showZeroDistanceConfirmDialog(context, vm);
+                  } else {
+                    // 거리가 있으면 즉시 저장 로직 실행
+                    _handleSave(context, vm);
+                  }
+                },
                 style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF4CAF50),
-                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15)
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 40, vertical: 15)
                 ),
-                child: const Text("확인", style: TextStyle(color: Colors.white, fontSize: 18)),
+                child: vm.isSaving
+                    ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2)
+                )
+                    : const Text(
+                    "확인", style: TextStyle(color: Colors.white, fontSize: 18)),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          _buildIndicator(vm), // (인디케이터 로직 생략)
-          const SizedBox(height: 20),
+          const SizedBox(height: 40),
         ],
       ),
     );
+  }
+
+// 거리 0일 때 확인 팝업
+  void _showZeroDistanceConfirmDialog(BuildContext context, WalkViewModel vm) {
+    showDialog(
+      context: context,
+      builder: (ctx) =>
+          AlertDialog(
+            title: const Text("알림"),
+            content: const Text("산책한 거리가 없습니다.\n그래도 등록하시겠습니까?"),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text("아니요")
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx); // 팝업 닫기
+                  _handleSave(context, vm); // "예"를 눌렀을 때만 저장 실행
+                },
+                child: const Text("예"),
+              ),
+            ],
+          ),
+    );
+  }
+
+// 실제 저장 로직 처리 함수
+  Future<void> _handleSave(BuildContext context, WalkViewModel vm) async {
+    try {
+      // ViewModel의 저장 함수 호출
+      await vm.stopWalkAndSave(vm.reviewController.text);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("후기가 등록되었습니다!")),
+        );
+        // 저장 성공 후 필요한 페이지 이동 로직이 있다면 여기에 추가 (예: 홈으로 가기)
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("등록 실패: $e"), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   // 인디케이터를 생성하는 별도의 메서드
@@ -555,7 +644,8 @@ class _WalkScreenState extends State<WalkScreen> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(vm.totalDots, (index) {
         // 사진이 없을 때는 1개의 회색 점, 있을 때는 현재 인덱스에 맞춰 강조
-        bool isSelected = vm.reviewImages.isNotEmpty && index == vm.currentImageIndex;
+        bool isSelected = vm.reviewImages.isNotEmpty &&
+            index == vm.currentImageIndex;
 
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -571,7 +661,62 @@ class _WalkScreenState extends State<WalkScreen> {
     );
   }
 
-  // [수정 부분 2] 산책 중 화면 (2~3번 사진 대응): 내 위치 버튼 및 종료 버튼 복구
+  // 이모지 상세 선택 팝업
+  void _showEmojiPicker(BuildContext context, WalkViewModel vm) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) =>
+          Container(
+            height: 300,
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                const Text("상태를 선택해주세요", style: TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 16)),
+                const Divider(height: 30),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: vm.emojiGroups.length,
+                    itemBuilder: (context, groupIdx) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: vm.emojiGroups[groupIdx].map((emoji) =>
+                              GestureDetector(
+                                onTap: () {
+                                  // [핵심] 클릭한 이모지와 해당 행의 인덱스를 전달
+                                  vm.selectEmojiFromPopup(groupIdx, emoji);
+                                  Navigator.pop(context); // 선택 후 즉시 팝업 닫기
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    // 현재 선택된 이모지라면 팝업 내에서도 살짝 표시
+                                    color: vm.selectedEmoji == emoji ? Colors
+                                        .orange.withOpacity(0.1) : Colors
+                                        .transparent,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(emoji,
+                                      style: const TextStyle(fontSize: 30)),
+                                ),
+                              )).toList(),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+    );
+  }
+
+  // 산책 중 화면: 내 위치 버튼 및 종료 버튼 복구
   Widget _buildWalking(WalkViewModel vm) {
     return Stack(
       children: [
@@ -583,7 +728,7 @@ class _WalkScreenState extends State<WalkScreen> {
           child: WalkInfoCard(seconds: vm.seconds, distanceMeters: vm.distance),
         ),
 
-        // [추가] 사용자의 위치를 중심으로 하는 버튼 복구 [요구사항 4]
+        // 사용자의 위치를 중심으로 하는 버튼 복구 [요구사항 4]
         Positioned(
           bottom: 140, // 컨트롤 바 위쪽에 배치
           right: 20,
@@ -600,144 +745,57 @@ class _WalkScreenState extends State<WalkScreen> {
           bottom: 40, left: 0, right: 0,
           child: WalkControls(
             isWalking: vm.isWalking,
-            isPaused: vm.isPaused,
             distanceMeters: vm.distance,
             seconds: vm.seconds,
             onStart: () {},
-            onStop: () => vm.setWalkState(2), // 클릭 시 요약 단계(2)로 이동하며 기록 정지
+            // [변경] 단순히 walkState를 바꾸는 것이 아니라 vm.completeWalk()를 호출합니다.
+            onStop: () => vm.completeWalk(),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildMap(WalkViewModel vm) {
-    return GoogleMap(
-      initialCameraPosition: CameraPosition(
-          target: vm.currentPosition!, zoom: 16.5), // 1:12,500
-      markers: {
-        Marker(
-          markerId: const MarkerId("pet"),
-          position: vm.currentPosition!,
-          icon: BitmapDescriptor.defaultMarker, // 여기에 커스텀 마커 적용
-        )
-      },
-      polylines: {
-        Polyline(polylineId: const PolylineId("route"),
-            points: vm.route,
-            color: Colors.orange,
-            width: 6),
-      },
-    );
-  }
-
   // 공통 지도 위젯 (배율 16.5 적용)
   Widget _buildGoogleMap(WalkViewModel vm, {bool interaction = true}) {
     return FutureBuilder<BitmapDescriptor>(
-        future: vm.getPetMarkerIcon(vm.selectedPet?['imageUrl']), // 비동기로 마커 생성 호출
-        builder: (context, snapshot) {
-          return GoogleMap(
-            // 1:12,500 배율 적용 (Zoom 16.5)
-            initialCameraPosition: CameraPosition(
-              target: vm.currentPosition ?? const LatLng(37.5665, 126.9780),
-              zoom: 16.5,
-            ),
-            myLocationEnabled: true,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            scrollGesturesEnabled: interaction,
-            polylines: {
-              Polyline(
-                polylineId: const PolylineId("route"),
-                points: vm.route,
-                color: const Color(0xFFFF9800), // 주황색 경로
-                width: 6,
-                jointType: JointType.round,
-              ),
-            },
-            markers: {
-              if (vm.currentPosition != null)
-                Marker(
-                  markerId: const MarkerId("pet_location"),
-                  position: vm.currentPosition!,
-                  // 스냅샷 데이터(가공된 펫 이미지)가 있으면 적용, 없으면 기본 로딩용 마커
-                  icon: snapshot.data ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-                ),
-            },
-            onMapCreated: (controller) => vm.setMapController(controller),
-          );
-        },
-    );
-  }
-
-  Widget _buildInitialOverlay(WalkViewModel vm) {
-    return Positioned.fill(
-      child: Container(
-        color: Colors.white.withOpacity(0.9),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text("오늘도 즐거운 산책 해보아용 >.<",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 60),
-            GestureDetector(
-              onTap: () => vm.startWalk(['pet_dummy_id']),
-              child: Container(
-                width: 180, height: 180,
-                decoration: const BoxDecoration(
-                    color: Color(0xFFFF9800), shape: BoxShape.circle),
-                child: const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.pets, size: 50, color: Colors.white),
-                    Text("START", style: TextStyle(fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white)),
-                  ],
-                ),
-              ),
-            ),
-            // ... 최근 산책 기록 위젯 유지 ...
-          ],
-        ),
-      ),
-    );
-  }
-
-  // 종료 다이얼로그 띄우기
-  void _showStopDialog(BuildContext context, WalkViewModel vm) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) =>
-          WalkFinishDialog(
-            onComplete: (memo, emoji, visibility) async {
-              try {
-                await vm.stopWalk(
-                  memo: memo,
-                  emoji: emoji,
-                  visibility: visibility,
-                );
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("산책 기록이 저장되었습니다! 🚩")),
-                  );
-                }
-              } catch (e) {
-                // [수정] 에러 메시지를 구체적으로 표시 (permission-denied 등)
-                String errorMsg = e.toString();
-                if (errorMsg.contains("permission-denied")) {
-                  errorMsg = "서버 권한이 거부되었습니다. 관리자에게 문의하세요.";
-                }
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text("저장 실패: $errorMsg"),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
+      future: vm.getPetMarkerIcon(vm.selectedPet?['imageUrl']), // 비동기로 마커 생성 호출
+      builder: (context, snapshot) {
+        return GoogleMap(
+          // 1:12,500 배율 적용 (Zoom 16.5)
+          initialCameraPosition: CameraPosition(
+            target: vm.currentPosition ?? const LatLng(37.5665, 126.9780),
+            zoom: 16.5,
           ),
+          myLocationEnabled: false,
+          myLocationButtonEnabled: false,
+          zoomControlsEnabled: false,
+          scrollGesturesEnabled: interaction,
+          polylines: {
+            Polyline(
+              polylineId: const PolylineId("route"),
+              points: vm.route,
+              color: const Color(0xFFFF9800),
+              // 주황색 경로
+              width: 6,
+              jointType: JointType.round,
+            ),
+          },
+          markers: {
+            if (vm.currentPosition != null)
+              Marker(
+                markerId: const MarkerId("pet_location"),
+                position: vm.currentPosition!,
+                // 스냅샷 데이터(가공된 펫 이미지)가 있으면 적용, 없으면 기본 로딩용 마커
+                // [수정] FutureBuilder를 쓰지 않고 ViewModel에 저장된 캐시 아이콘을 사용
+                icon: vm.petIcon ?? BitmapDescriptor.defaultMarkerWithHue(
+                    BitmapDescriptor.hueOrange),
+                anchor: const Offset(0.5, 0.5), // 마커의 중심을 좌표에 맞춤
+              ),
+          },
+          onMapCreated: (controller) => vm.setMapController(controller),
+        );
+      },
     );
   }
 }
@@ -811,7 +869,6 @@ class WalkInfoCard extends StatelessWidget {
 // 2. 컨트롤 버튼
 class WalkControls extends StatelessWidget {
   final bool isWalking;
-  final bool isPaused;
   final double distanceMeters;
   final int seconds;
   final VoidCallback onStart;
@@ -820,7 +877,6 @@ class WalkControls extends StatelessWidget {
   const WalkControls({
     super.key,
     required this.isWalking,
-    required this.isPaused,
     required this.distanceMeters,
     required this.seconds,
     required this.onStart,

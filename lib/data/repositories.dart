@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../core/notification_service.dart';
-
-// 각 기능별 모델들을 import 합니다.
 import '../features/auth/models.dart';
 import '../features/pet/models.dart';
 import '../features/walk/models.dart';
-import '../features/social/models.dart';
 
 // -----------------------------------------------------------------------------
 // 1. 유저 (Auth) 리포지토리
@@ -215,7 +212,7 @@ class SocialRepository {
         if (!myDoc.exists || !targetDoc.exists) return;
 
         // 내 닉네임 저장 (알림 전송용)
-        final myData = myDoc.data() as Map<String, dynamic>?;
+        final myData = myDoc.data();
         myNickname = myData?['nickname'] as String?;
 
         // 쓰기 작업
@@ -357,7 +354,7 @@ class WalkRepository {
         // 사용자 정보 가져오기
         final userDoc = await _db.collection('users').doc(walk.userId).get();
         if (userDoc.exists) {
-          final userData = userDoc.data() as Map<String, dynamic>?;
+          final userData = userDoc.data();
           final userNickname = userData?['nickname'] as String? ?? '사용자';
           
           debugPrint('사용자 정보 확인: nickname=$userNickname');

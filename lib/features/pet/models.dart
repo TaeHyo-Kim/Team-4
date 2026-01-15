@@ -10,7 +10,7 @@ class PetModel {
   final String imageUrl;
   final double weight;
   final bool isNeutered;  // 중성화 여부
-  final bool isPrimary;   // [추가] 대표 반려동물 여부
+  final bool isPrimary;   // 대표 반려동물 여부
 
   PetModel({
     required this.id,
