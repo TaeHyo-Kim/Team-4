@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-
 import 'features/auth/viewmodels.dart';
 import 'features/auth/views.dart';
 import 'features/pet/viewmodels.dart';

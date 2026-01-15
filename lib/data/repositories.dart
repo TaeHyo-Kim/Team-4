@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../core/notification_service.dart';
-
-// 각 기능별 모델들을 import 합니다.
 import '../features/auth/models.dart';
 import '../features/pet/models.dart';
 import '../features/walk/models.dart';
-import '../features/social/models.dart';
 
 // -----------------------------------------------------------------------------
 // 1. 유저 (Auth) 리포지토리

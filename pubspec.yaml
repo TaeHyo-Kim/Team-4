@@ -70,4 +70,4 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - asset/images/logo.png
+    - asset/images/logo.webp

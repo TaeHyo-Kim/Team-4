@@ -3,7 +3,6 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/permission_service.dart';
 import '../../core/notification_service.dart';
 
-//원복
 /// 권한 요청 화면 (회원가입 후 표시)
 class PermissionRequestView extends StatefulWidget {
   const PermissionRequestView({super.key});

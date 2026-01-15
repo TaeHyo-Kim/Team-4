@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -9,7 +8,6 @@ import '../auth/models.dart';
 import '../profile/views.dart';
 import '../profile/viewmodels.dart';
 import '../walk/models.dart';
-import '../pet/viewmodels.dart';
 import '../auth/viewmodels.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';

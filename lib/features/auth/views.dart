@@ -1,15 +1,9 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:permission_handler/permission_handler.dart' as ph;
 import 'viewmodels.dart';
-import '../pet/views.dart';
-import '../../data/repositories.dart';
-import '../walk/models.dart';
-import '../profile/viewmodels.dart';
 import '../social/views.dart'; // [추가] 차단된 계정 화면 이동을 위해 필요
 import 'permission_request_view.dart';
 import '../../core/permission_service.dart';
@@ -75,7 +69,7 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Image.asset(
-                  'asset/images/logo.png',
+                  'asset/images/logo.webp',
                   width: 280,
                   errorBuilder: (context, error, stackTrace) => const Icon(Icons.pets, size: 100, color: Color(0xFF4CAF50)),
                 ),
@@ -192,7 +186,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Image.asset('asset/images/logo.png', width: 280, errorBuilder: (context, error, stackTrace) => const Icon(Icons.pets, size: 100, color: Color(0xFF4CAF50))),
+              Image.asset('asset/images/logo.webp', width: 280, errorBuilder: (context, error, stackTrace) => const Icon(Icons.pets, size: 100, color: Color(0xFF4CAF50))),
               const SizedBox(height: 40),
               if (_step == 1) ...[
                 const Text("비밀번호를 잊으셨나요?\n가입하신 이메일을 입력해주세요.", textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF2C3E50), fontSize: 16)),
@@ -690,7 +684,7 @@ class _PasswordChangeStep1ScreenState extends State<PasswordChangeStep1Screen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Image.asset('asset/images/logo.png', width: 280, errorBuilder: (context, error, stackTrace) => const Icon(Icons.pets, size: 100, color: Color(0xFF4CAF50))),
+              Image.asset('asset/images/logo.webp', width: 280, errorBuilder: (context, error, stackTrace) => const Icon(Icons.pets, size: 100, color: Color(0xFF4CAF50))),
               const SizedBox(height: 40),
               const Text("보안을 위해 현재 비밀번호를 입력해주세요.", style: TextStyle(fontSize: 16, color: Color(0xFF2C3E50))),
               const SizedBox(height: 20),
@@ -785,7 +779,7 @@ class _PasswordChangeStep2ScreenState extends State<PasswordChangeStep2Screen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Image.asset('asset/images/logo.png', width: 280, errorBuilder: (context, error, stackTrace) => const Icon(Icons.pets, size: 100, color: Color(0xFF4CAF50))),
+              Image.asset('asset/images/logo.webp', width: 280, errorBuilder: (context, error, stackTrace) => const Icon(Icons.pets, size: 100, color: Color(0xFF4CAF50))),
               const SizedBox(height: 40),
               const Text("새로운 비밀번호를 입력해주세요.", style: TextStyle(fontSize: 16, color: Color(0xFF2C3E50))),
               const SizedBox(height: 24),
