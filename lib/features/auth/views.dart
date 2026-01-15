@@ -57,7 +57,33 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = context.watch<AuthViewModel>().isLoading;
+
+    final authVM = context.watch<AuthViewModel>();
+    final isLoading = authVM.isLoading;
+
+    // [추가 기능] 중복 로그인 메시지 발생 시 다이얼로그 노출
+    if (authVM.errorMessage == "다른 기기에서 로그인이 감지되어 로그아웃되었습니다.") {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            title: const Text("보안 알림"),
+            content: const Text("다른 기기에서 로그인하여 현재 기기의 연결이 종료되었습니다."),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  authVM.clearError(); // 에러 메시지 초기화
+                  Navigator.pop(ctx);
+                },
+                child: const Text("확인"),
+              ),
+            ],
+          ),
+        );
+      });
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: Center(
@@ -618,9 +644,13 @@ class AccountManagementScreen extends StatelessWidget {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(vm.errorMessage!), backgroundColor: Colors.redAccent),
                   );
-                  Navigator.pop(ctx);
                 } else {
-                  // 탈퇴 성공 시: 로그인 화면으로 보내고 스택 제거
+                  // 탈퇴 성공 시:
+                  // 1. 열려있는 모든 다이얼로그 닫기
+                  Navigator.of(context, rootNavigator: true).pop();
+
+                  // 2. 모든 화면 스택을 제거하고 로그인 화면으로 강제 이동
+                  // (AuthGate가 LoginScreen을 띄우겠지만, Navigator 스택 정리를 위해 필요)
                   Navigator.of(context).pushAndRemoveUntil(
                     MaterialPageRoute(builder: (_) => const LoginScreen()),
                         (route) => false,

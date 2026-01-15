@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../data/repositories.dart';
 import 'models.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // [추가] FCM 토큰 사용
 
 class AuthViewModel with ChangeNotifier {
   final AuthRepository _repo = AuthRepository();
@@ -16,19 +17,31 @@ class AuthViewModel with ChangeNotifier {
   String? _errorMessage;
   StreamSubscription? _userSub;
 
+  // [추가] 중복 로그인 감시를 위한 변수들
+  StreamSubscription? _sessionSub;
+  String? _currentDeviceToken;
+
   User? get user => _user;
   UserModel? get userModel => _userModel;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
   AuthViewModel() {
-    _auth.authStateChanges().listen((firebaseUser) {
+    _auth.authStateChanges().listen((firebaseUser) async {
       debugPrint("Auth 상태 변경: ${firebaseUser?.uid}");
       _user = firebaseUser;
       
       _userSub?.cancel();
+      _sessionSub?.cancel(); // [추가] 이전 세션 감시 중단
 
       if (firebaseUser != null) {
+        // 1. 현재 기기의 토큰 가져오기
+        _currentDeviceToken = await FirebaseMessaging.instance.getToken();
+        debugPrint("내 기기 토큰: $_currentDeviceToken"); // 디버깅용
+
+        // 2. [중요] 실시간 세션 감시를 여기서 직접 호출해야 작동함
+        _startSessionCheck(firebaseUser.uid);
+
         _userSub = _repo.userStream(firebaseUser.uid).listen((updatedUser) {
           _userModel = updatedUser;
           notifyListeners();
@@ -37,9 +50,37 @@ class AuthViewModel with ChangeNotifier {
         });
       } else {
         _userModel = null;
+        _currentDeviceToken = null;
         notifyListeners();
       }
     });
+  }
+
+  // [추가] 실시간 세션 체크 함수
+  void _startSessionCheck(String uid) {
+    _sessionSub = _db.collection('users').doc(uid).snapshots().listen((snapshot) {
+      if (snapshot.exists) {
+        final data = snapshot.data() as Map<String, dynamic>;
+        final String? lastSessionId = data['lastSessionId'];
+
+        debugPrint("Firestore 세션 ID: $lastSessionId");
+        debugPrint("현재 내 기기 토큰: $_currentDeviceToken");
+
+        // Firestore의 세션 ID가 존재하고, 현재 기기의 토큰과 다르다면 중복 로그인 발생
+        if (lastSessionId != null && _currentDeviceToken != null &&
+            lastSessionId != _currentDeviceToken) {
+          debugPrint("세션 불일치 감지! 강제 로그아웃 실행");
+          _handleForceLogout();
+        }
+      }
+    });
+  }
+
+  // [추가] 강제 로그아웃 처리
+  Future<void> _handleForceLogout() async {
+    await logout(); // 현재 기기 로그아웃
+    _errorMessage = "다른 기기에서 로그인이 감지되어 로그아웃되었습니다.";
+    notifyListeners();
   }
 
   void clearError() {
@@ -80,17 +121,21 @@ class AuthViewModel with ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      await _auth.signInWithEmailAndPassword(email: email, password: password);
+      final userCredential = await _auth.signInWithEmailAndPassword(email: email, password: password);
       debugPrint("로그인 성공");
+
+      final token = await FirebaseMessaging.instance.getToken();
+      _currentDeviceToken = token; // 내 상태 업데이트
+      await _db.collection('users').doc(userCredential.user!.uid).update({
+        'lastSessionId': token,
+      });
+
     } on FirebaseAuthException catch (e) {
       _errorMessage = _parseFirebaseError(e);
     } catch (e) {
       _errorMessage = '로그인 중 오류가 발생했습니다.';
     } finally {
       _isLoading = false;
-      if (errorMessage == null) {
-        // 로그인 성공 시 로딩 상태 해제 후 알림
-      }
       notifyListeners();
     }
   }
@@ -106,6 +151,7 @@ class AuthViewModel with ChangeNotifier {
       );
 
       final uid = userCredential.user!.uid;
+      final token = await FirebaseMessaging.instance.getToken();
       final newUser = UserModel(
         uid: uid,
         email: email,
@@ -122,11 +168,17 @@ class AuthViewModel with ChangeNotifier {
         rethrow;
       }
 
+      // [수정] lastSessionId 필드 포함하여 저장
+      final userData = newUser.toMap();
+      userData['lastSessionId'] = token;
+
+      await _db.collection('users').doc(uid).set(userData);
       await userCredential.user!.updateDisplayName(nickname);
+
     } on FirebaseAuthException catch (e) {
       _errorMessage = _parseFirebaseError(e);
     } catch (e) {
-      _errorMessage = e.toString().replaceAll("Exception: ", "");
+      _errorMessage = e.toString();
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -193,8 +245,6 @@ class AuthViewModel with ChangeNotifier {
       final batch = _db.batch();
       // 1. 계정 삭제 시도 (보안 민감 작업이므로 먼저 수행)
       // 여기서 'requires-recent-login' 에러가 나면 아래 Firestore 삭제를 실행하지 않음
-      await user.delete();
-
       final walks = await _db.collection('walks').where('userId', isEqualTo: uid).get();
       for (var doc in walks.docs) { batch.delete(doc.reference); }
 
@@ -207,16 +257,15 @@ class AuthViewModel with ChangeNotifier {
       if (_userModel != null) {
         batch.delete(_db.collection('usernames').doc(_userModel!.nickname));
       }
-
       batch.delete(_db.collection('users').doc(uid));
 
       await batch.commit();
       await user.delete();
-      await logout();
 
-      _userModel = null;
       _userSub?.cancel();
-      _errorMessage = null; // 성공했으므로 에러 없음
+      _sessionSub?.cancel();
+      _userModel = null;
+      _errorMessage = null;
       debugPrint("회원 탈퇴 및 세션 정리 완료");
 
     } on FirebaseAuthException catch (e) {
