@@ -911,8 +911,6 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
   @override
   Widget build(BuildContext context) {
     final socialVM = context.watch<SocialViewModel>();
-
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
