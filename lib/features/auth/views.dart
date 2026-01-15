@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:permission_handler/permission_handler.dart' as ph;
 import 'viewmodels.dart';
-import '../social/views.dart'; // [추가] 차단된 계정 화면 이동을 위해 필요
+import '../social/views.dart'; 
 import 'permission_request_view.dart';
 import '../../core/permission_service.dart';
 import '../../core/notification_service.dart';
@@ -61,7 +61,6 @@ class _LoginScreenState extends State<LoginScreen> {
     final authVM = context.watch<AuthViewModel>();
     final isLoading = authVM.isLoading;
 
-    // [추가 기능] 중복 로그인 메시지 발생 시 다이얼로그 노출
     if (authVM.errorMessage == "다른 기기에서 로그인이 감지되어 로그아웃되었습니다.") {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         showDialog(
@@ -73,7 +72,7 @@ class _LoginScreenState extends State<LoginScreen> {
             actions: [
               TextButton(
                 onPressed: () {
-                  authVM.clearError(); // 에러 메시지 초기화
+                  authVM.clearError();
                   Navigator.pop(ctx);
                 },
                 child: const Text("확인"),
@@ -614,52 +613,67 @@ class AccountManagementScreen extends StatelessWidget {
   void _showDeleteAccountDialog(BuildContext context, AuthViewModel authVM) {
     showDialog(
       context: context,
-      barrierDismissible: !authVM.isLoading, // 로딩 중에는 창 닫기 방지
-      builder: (ctx) => Consumer<AuthViewModel>( // 내부 상태 감시를 위해 Consumer 사용
-        builder: (context, vm, child) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text("회원 탈퇴"),
-          content: vm.isLoading
-              ? const Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AppLoadingIndicator(),
-              SizedBox(height: 16),
-              Text("계정 정보를 삭제 중입니다..."),
-            ],
-          )
-              : const Text("정말 탈퇴하시겠습니까?\n모든 데이터가 삭제되며 복구할 수 없습니다."),
-          actions: vm.isLoading ? [] : [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text("취소", style: TextStyle(color: Colors.grey)),
+      barrierDismissible: !authVM.isLoading, 
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+        backgroundColor: Colors.white,
+        child: Consumer<AuthViewModel>(
+          builder: (context, vm, child) => Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(color: Colors.red.shade50, shape: BoxShape.circle),
+                  child: Icon(Icons.warning_amber_rounded, size: 40, color: Colors.red.shade400),
+                ),
+                const SizedBox(height: 20),
+                const Text("회원 탈퇴", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
+                const SizedBox(height: 12),
+                if (vm.isLoading) ...[
+                  const AppLoadingIndicator(color: Colors.redAccent),
+                  const SizedBox(height: 16),
+                  const Text("계정 정보를 삭제 중입니다...", style: TextStyle(color: Colors.grey)),
+                ] else ...[
+                  const Text("정말 탈퇴하시겠습니까?\n모든 데이터가 삭제되며 복구할 수 없습니다.", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, height: 1.5)),
+                  const SizedBox(height: 30),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text("취소", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            await vm.deleteAccount();
+                            if (!context.mounted) return;
+                            if (vm.errorMessage != null) {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(vm.errorMessage!), backgroundColor: Colors.redAccent));
+                            } else {
+                              Navigator.of(context, rootNavigator: true).pop();
+                              Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false);
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red.shade400,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text("탈퇴하기", style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
-            TextButton(
-              onPressed: () async {
-                await vm.deleteAccount();
-                if (!context.mounted) return;
-
-                if (vm.errorMessage != null) {
-                  // 재인증 필요 등 에러 발생 시
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(vm.errorMessage!), backgroundColor: Colors.redAccent),
-                  );
-                } else {
-                  // 탈퇴 성공 시:
-                  // 1. 열려있는 모든 다이얼로그 닫기
-                  Navigator.of(context, rootNavigator: true).pop();
-
-                  // 2. 모든 화면 스택을 제거하고 로그인 화면으로 강제 이동
-                  // (AuthGate가 LoginScreen을 띄우겠지만, Navigator 스택 정리를 위해 필요)
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
-                        (route) => false,
-                  );
-                }
-              },
-              child: const Text("탈퇴하기", style: TextStyle(color: Colors.redAccent)),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -697,7 +711,7 @@ class _PasswordChangeStep1ScreenState extends State<PasswordChangeStep1Screen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Image.asset('asset/images/logo.webp', width: 280, errorBuilder: (context, error, stackTrace) => const Icon(Icons.pets, size: 100, color: Color(0xFF4CAF50))),
+              Image.asset('asset/images/logo.png', width: 280, errorBuilder: (context, error, stackTrace) => const Icon(Icons.pets, size: 100, color: Color(0xFF4CAF50))),
               const SizedBox(height: 40),
               const Text("보안을 위해 현재 비밀번호를 입력해주세요.", style: TextStyle(fontSize: 16, color: Color(0xFF2C3E50))),
               const SizedBox(height: 20),
@@ -795,7 +809,7 @@ class _PasswordChangeStep2ScreenState extends State<PasswordChangeStep2Screen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Image.asset('asset/images/logo.webp', width: 280,
+              Image.asset('asset/images/logo.png', width: 280,
                   errorBuilder: (context, error, stackTrace) =>
                   const Icon(Icons.pets, size: 100, color: Color(0xFF4CAF50))),
               const SizedBox(height: 40),
@@ -954,7 +968,7 @@ class _VisibilitySettingsScreenState extends State<VisibilitySettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: double.infinity, // 너비 통일
+              width: double.infinity, 
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -1008,8 +1022,8 @@ class _VisibilitySettingsScreenState extends State<VisibilitySettingsScreen> {
       borderRadius: BorderRadius.circular(20),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        width: double.infinity, // 너비 통일
-        height: 110, // 높이 고정으로 크기 통일
+        width: double.infinity, 
+        height: 110, 
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFFE8F5E9) : Colors.white,
@@ -1037,13 +1051,13 @@ class _VisibilitySettingsScreenState extends State<VisibilitySettingsScreen> {
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center, // 수직 중앙 정렬
+                mainAxisAlignment: MainAxisAlignment.center, 
                 children: [
                   Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isSelected ? const Color(0xFF2E7D32) : Colors.black87)),
                   const SizedBox(height: 4),
                   Text(description, 
-                    maxLines: 2, // 줄 수 제한
-                    overflow: TextOverflow.ellipsis, // 넘치는 텍스트 처리
+                    maxLines: 2, 
+                    overflow: TextOverflow.ellipsis, 
                     style: TextStyle(fontSize: 13, color: isSelected ? const Color(0xFF4CAF50) : Colors.grey[600], height: 1.3)),
                 ],
               ),
