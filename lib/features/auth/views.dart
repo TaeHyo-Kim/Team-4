@@ -764,12 +764,15 @@ class _PasswordChangeStep2ScreenState extends State<PasswordChangeStep2Screen> {
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = context.watch<AuthViewModel>().isLoading;
+    final isLoading = context
+        .watch<AuthViewModel>()
+        .isLoading;
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: const Color(0xFF4CAF50),
-        title: const Text("새 비밀번호 설정", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text("새 비밀번호 설정",
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
@@ -779,9 +782,12 @@ class _PasswordChangeStep2ScreenState extends State<PasswordChangeStep2Screen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Image.asset('asset/images/logo.webp', width: 280, errorBuilder: (context, error, stackTrace) => const Icon(Icons.pets, size: 100, color: Color(0xFF4CAF50))),
+              Image.asset('asset/images/logo.webp', width: 280,
+                  errorBuilder: (context, error, stackTrace) =>
+                  const Icon(Icons.pets, size: 100, color: Color(0xFF4CAF50))),
               const SizedBox(height: 40),
-              const Text("새로운 비밀번호를 입력해주세요.", style: TextStyle(fontSize: 16, color: Color(0xFF2C3E50))),
+              const Text("새로운 비밀번호를 입력해주세요.",
+                  style: TextStyle(fontSize: 16, color: Color(0xFF2C3E50))),
               const SizedBox(height: 24),
               TextField(
                 controller: _newPwCtrl,
@@ -790,10 +796,18 @@ class _PasswordChangeStep2ScreenState extends State<PasswordChangeStep2Screen> {
                   labelText: "새 비밀번호",
                   filled: true,
                   fillColor: Colors.grey[50],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: Colors.grey[200]!)),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: Colors.grey[200]!)),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Color(0xFF4CAF50), width: 2)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: BorderSide(color: Colors.grey[200]!)),
+                  enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: BorderSide(color: Colors.grey[200]!)),
+                  focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: const BorderSide(
+                          color: Color(0xFF4CAF50), width: 2)),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 15),
                 ),
               ),
               const SizedBox(height: 12),
@@ -804,10 +818,18 @@ class _PasswordChangeStep2ScreenState extends State<PasswordChangeStep2Screen> {
                   labelText: "비밀번호 확인",
                   filled: true,
                   fillColor: Colors.grey[50],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: Colors.grey[200]!)),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: Colors.grey[200]!)),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Color(0xFF4CAF50), width: 2)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: BorderSide(color: Colors.grey[200]!)),
+                  enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: BorderSide(color: Colors.grey[200]!)),
+                  focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: const BorderSide(
+                          color: Color(0xFF4CAF50), width: 2)),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 15),
                 ),
               ),
               const SizedBox(height: 32),
@@ -816,31 +838,44 @@ class _PasswordChangeStep2ScreenState extends State<PasswordChangeStep2Screen> {
                 height: 55,
                 child: ElevatedButton(
                   onPressed: isLoading ? null : () async {
-                    if (_newPwCtrl.text.isEmpty || _newPwCtrl.text != _confirmPwCtrl.text) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("비밀번호가 일치하지 않습니다.")));
+                    if (_newPwCtrl.text.isEmpty ||
+                        _newPwCtrl.text != _confirmPwCtrl.text) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("비밀번호가 일치하지 않습니다.")));
                       return;
                     }
                     if (_newPwCtrl.text == widget.currentPassword) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("새 비밀번호는 기존 비밀번호와 달라야 합니다.")));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text(
+                              "새 비밀번호는 기존 비밀번호와 달라야 합니다.")));
                       return;
                     }
                     try {
-                      await FirebaseAuth.instance.currentUser?.updatePassword(_newPwCtrl.text);
+                      await FirebaseAuth.instance.currentUser?.updatePassword(
+                          _newPwCtrl.text);
                       if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("비밀번호가 변경되었습니다. 다시 로그인해주세요.")));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text(
+                                "비밀번호가 변경되었습니다. 다시 로그인해주세요.")));
                         context.read<AuthViewModel>().logout();
-                        Navigator.of(context).popUntil((route) => route.isFirst);
+                        Navigator.of(context).popUntil((route) =>
+                        route.isFirst);
                       }
                     } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("변경 실패: $e")));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text("변경 실패: $e")));
                     }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFF9800),
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15)),
                   ),
-                  child: isLoading ? const AppLoadingIndicator(color: Colors.white) : const Text("변경 완료", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  child: isLoading ? const AppLoadingIndicator(
+                      color: Colors.white) : const Text("변경 완료",
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(height: 80),
@@ -848,24 +883,6 @@ class _PasswordChangeStep2ScreenState extends State<PasswordChangeStep2Screen> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildPwField(String label, TextEditingController ctrl) {
-    return Row(
-      children: [
-        SizedBox(width: 120, child: Text(label, style: const TextStyle(fontSize: 14))),
-        Expanded(
-          child: TextField(
-            controller: ctrl, 
-            obscureText: true, 
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), 
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

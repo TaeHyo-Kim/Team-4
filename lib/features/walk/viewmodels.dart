@@ -42,7 +42,6 @@ class WalkViewModel with ChangeNotifier {
   bool _isUserInteracting = false;
 
   bool _isWalking = false;
-  bool _isPaused = false;
   int _seconds = 0;
   double _distance = 0.0; // 미터 단위 (모델 저장 시 km로 변환)
 
@@ -79,8 +78,6 @@ class WalkViewModel with ChangeNotifier {
   // ------------------------------------------------------------------------
   bool get isWalking => _isWalking;
 
-  bool get isPaused => _isPaused;
-
   int get seconds => _seconds;
 
   double get distance => _distance;
@@ -103,7 +100,6 @@ class WalkViewModel with ChangeNotifier {
 
     // 상태 변수 초기화
     _isWalking = false;
-    _isPaused = false;
     _seconds = 0;
     _distance = 0.0;
     _route = [];
@@ -198,7 +194,6 @@ class WalkViewModel with ChangeNotifier {
 
     // 초기화
     _isWalking = true;
-    _isPaused = false;
     _seconds = 0;
     _distance = 0.0;
     _route = [];
@@ -307,7 +302,6 @@ class WalkViewModel with ChangeNotifier {
     _positionStream?.cancel();
     _timer?.cancel();
     _isWalking = false;
-    _isPaused = false;
 
     // 1. 데이터 가공
     final walkEndTime = endTime ?? DateTime.now();
@@ -380,15 +374,9 @@ class WalkViewModel with ChangeNotifier {
   void _startTimer() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!_isPaused) {
-        _seconds++;
-        notifyListeners();
-      }
+
     });
   }
-
-  // 보정 로직을 위한 설정값
-  final double _accuracyThreshold = 20.0; // 20m 이상 오차 무시
 
   // [추가 6] 스와이프 제어를 위한 컨트롤러
   final PageController pageController = PageController();
@@ -455,80 +443,6 @@ class WalkViewModel with ChangeNotifier {
       walkState = 2;
       notifyListeners();
     }
-  }
-
-  // [수정 1] 산책 종료 시 전체 경로 캡처 로직
-  Future<void> finishWalkWithSnapshot() async {
-    if (_route.isEmpty || _mapController == null) {
-      finishWalk();
-      return;
-    }
-
-    // 1. 전체 경로가 다 보이도록 좌표 경계 계산
-    LatLngBounds bounds = _getBounds(_route);
-
-    // 2. 지도 배율 조정 (Padding 50 주어 여유 있게 보정)
-    await _mapController!.animateCamera(
-        CameraUpdate.newLatLngBounds(bounds, 50));
-
-    // 3. 지도가 렌더링될 때까지 잠시 대기 후 캡처
-    await Future.delayed(const Duration(milliseconds: 500));
-    final Uint8List? imageBytes = await _mapController!.takeSnapshot();
-
-    if (imageBytes != null) {
-      // 4. 바이트 데이터를 임시 파일로 저장하여 이미지 리스트 첫 번째에 추가
-      final tempDir = await getTemporaryDirectory();
-      final file = await File('${tempDir.path}/walk_snap_${DateTime
-          .now()
-          .millisecondsSinceEpoch}.png').create();
-      await file.writeAsBytes(imageBytes);
-
-      reviewImages.insert(0, XFile(file.path)); // 첫 번째 사진으로 삽입
-    }
-
-    finishWalk(); // 기존 종료 로직 호출 (상태 2로 변경 등)
-  }
-
-  // [수정 1] 스냅샷 캡처 (시작점: 빨강, 도착점: 파랑)
-  Future<void> captureSnapshot() async {
-    if (_route.isEmpty || _mapController == null) return;
-
-    // 1. 시작점과 끝점 마커 설정 (기존 펫 마커 제외)
-    snapshotMarkers = {
-      Marker(
-        markerId: const MarkerId("start"),
-        position: _route.first,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-      ),
-      Marker(
-        markerId: const MarkerId("end"),
-        position: _route.last,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
-      ),
-    };
-    notifyListeners();
-
-    // 2. 경로가 모두 보이도록 카메라 조정
-    LatLngBounds bounds = _getBounds(_route);
-    await _mapController!.animateCamera(
-        CameraUpdate.newLatLngBounds(bounds, 50));
-
-    // 3. 렌더링 대기 후 캡처
-    await Future.delayed(const Duration(milliseconds: 600));
-    final Uint8List? imageBytes = await _mapController!.takeSnapshot();
-
-    if (imageBytes != null) {
-      final tempDir = await getTemporaryDirectory();
-      final file = await File('${tempDir.path}/walk_${DateTime
-          .now()
-          .millisecondsSinceEpoch}.png').create();
-      await file.writeAsBytes(imageBytes);
-      reviewImages.insert(0, XFile(file.path));
-    }
-
-    // 캡처 후 상태 업데이트
-    snapshotMarkers.clear();
-    notifyListeners();
   }
 
   // [추가] 경로 전체 스냅샷 캡처 로직
@@ -613,28 +527,6 @@ class WalkViewModel with ChangeNotifier {
     }
   }
 
-
-  void setCurrentImageIndex(int index) {
-    if (index >= 0 && index < reviewImages.length) {
-      currentImageIndex = index;
-      notifyListeners();
-    }
-  }
-
-  void setCurrentImageIndexIncrement() {
-    if (currentImageIndex < reviewImages.length - 1) {
-      currentImageIndex++;
-      notifyListeners();
-    }
-  }
-
-  void setCurrentImageIndexDecrement() {
-    if (currentImageIndex > 0) {
-      currentImageIndex--;
-      notifyListeners();
-    }
-  }
-
   void setSelectedEmoji(String emoji) {
     selectedEmoji = emoji;
     notifyListeners();
@@ -687,18 +579,6 @@ class WalkViewModel with ChangeNotifier {
       debugPrint("마커 생성 에러: $e");
       return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
     }
-  }
-
-  // [수정] 산책 종료 시 시간 기록 및 상태 변경
-  void finishWalk() {
-    endTime = DateTime.now();
-    _isWalking = false; // 산책 버튼 잠김 해제의 핵심
-    _timer?.cancel();
-    _timer = null; // 재확인 방지
-    _positionStream?.cancel();
-    _positionStream = null;
-    walkState = 2; // 요약 화면으로 이동
-    notifyListeners();
   }
 
   bool _isSaving = false; // 중복 저장 방지 플래그
@@ -756,12 +636,6 @@ class WalkViewModel with ChangeNotifier {
       notifyListeners();
     }
   }
-
-  void _saveToLocalCache(List<LatLng> points) {
-    // SharedPreferences나 sqflite에 현재 경로를 임시 저장하는 로직을 여기에 구현합니다.
-    // 이는 네트워크 단절 후 앱이 강제 종료되었을 때 데이터를 보호합니다.
-  }
-
 
   @override
   void dispose() {

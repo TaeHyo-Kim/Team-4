@@ -4,22 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'viewmodels.dart';
 
-// [1] PetModel: 펫 정보를 담는 클래스
-class PetModel {
-  final String id;
-  final String name;
-
-  PetModel({required this.id, required this.name});
-
-  factory PetModel.fromDocument(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return PetModel(
-      id: doc.id,
-      name: data['name'] as String? ?? '이름 미정',
-    );
-  }
-}
-
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key});
 
@@ -388,8 +372,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final hours = seconds ~/ 3600;
     final minutes = (seconds % 3600) ~/ 60;
     String timeStr = "";
-    if (hours > 0) timeStr += "${hours}시간 ";
-    timeStr += "${minutes}분";
+    if (hours > 0) timeStr += "$hours시간 ";
+    timeStr += "$minutes분";
 
     return InkWell(
       onLongPress: () {
@@ -420,7 +404,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text("총 ${count}회 산책", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                  Text("총 $count회 산책", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                 ],
               ),
             ),
@@ -601,8 +585,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
     final h = totalSeconds ~/ 3600;
     final m = (totalSeconds % 3600) ~/ 60;
-    String timeStr = "${m}분";
-    if (h > 0) timeStr = "${h}시간 ${m}분";
+    String timeStr = "$m분";
+    if (h > 0) timeStr = "$h시간 $m분";
 
     return Column(
       children: [
@@ -617,7 +601,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               textBaseline: TextBaseline.alphabetic,
               children: [
                 Text(
-                    "${totalDist.toStringAsFixed(1)}",
+                    totalDist.toStringAsFixed(1),
                     style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Color(0xFF4CAF50))
                 ),
                 const SizedBox(width: 4),

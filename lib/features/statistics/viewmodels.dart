@@ -43,8 +43,6 @@ class StatViewModel extends ChangeNotifier {
     final firestore = FirebaseFirestore.instance;
 
     try {
-      print("🗑️ [삭제 시작] 펫 ID: $petId 정리 작업 수행 중...");
-
       // 1. 펫 정보 문서 삭제 (users/{uid}/pets 및 pets)
       await firestore.collection('users').doc(user.uid).collection('pets').doc(petId).delete();
 
@@ -135,7 +133,9 @@ class StatViewModel extends ChangeNotifier {
       final uniqueDocs = <String, QueryDocumentSnapshot>{};
 
       for (var snapshot in results) {
-        for (var doc in snapshot.docs) uniqueDocs[doc.id] = doc;
+        for (var doc in snapshot.docs) {
+          uniqueDocs[doc.id] = doc;
+        }
       }
 
       records = uniqueDocs.values.map((doc) {

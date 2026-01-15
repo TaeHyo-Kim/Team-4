@@ -24,7 +24,7 @@ class _SocialScreenState extends State<SocialScreen> {
   final _searchCtrl = TextEditingController();
   final FocusNode _searchFocus = FocusNode(); // 검색창 포커스 감지용
   GoogleMapController? _mapController;
-  bool _isFocused = false;
+  final bool _isFocused = false;
   UserModel? _selectedUser; // 마커 클릭 시 선택된 유저 정보 저장
   Timer? _mapInactivityTimer;      // 지도 비활성 타이머 관련 에러 해결
   bool _isUserInteracting = false; // 사용자 상호작용 감지 에러 해결
@@ -204,7 +204,7 @@ class _SocialScreenState extends State<SocialScreen> {
                 ),
                 // 주변 유저 마커들...
                 ...vm.nearbyUsers.map((user) {
-                  final pos = user.position as GeoPoint?;
+                  final pos = user.position;
                   return Marker(
                     markerId: MarkerId(user.uid),
                     position: LatLng(pos?.latitude ?? 0.0, pos?.longitude ?? 0.0),
@@ -757,7 +757,7 @@ class _OtherUserProfileViewState extends State<OtherUserProfileView> {
                               mainAxisAlignment: MainAxisAlignment.spaceAround,
                               children: [
                                 _buildLuxStatItem(Icons.straighten_rounded,
-                                    "${walk.distance.toStringAsFixed(2)}", "km",
+                                    walk.distance.toStringAsFixed(2), "km",
                                     const Color(0xFF4CAF50)),
                                 _buildLuxStatItem(
                                     Icons.access_time_rounded, durationText,

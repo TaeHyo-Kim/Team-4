@@ -112,21 +112,6 @@ class ProfileViewModel with ChangeNotifier {
     }
   }
 
-  // 기존 메서드 유지
-  Future<void> updateProfileInfo(String nickname, String bio) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-
-    try {
-      await _db.collection('users').doc(uid).update({
-        'nickname': nickname,
-        'bio': bio,
-      });
-    } catch (e) {
-      rethrow;
-    }
-  }
-
   // 팔로잉 목록 가져오기
   Future<void> fetchFollowingUsers(String userId) async {
     _isLoading = true;

@@ -475,7 +475,7 @@ class _ProfileViewState extends State<ProfileView> {
                               mainAxisAlignment: MainAxisAlignment.spaceAround,
                               children: [
                                 _buildLuxStatItem(Icons.straighten_rounded,
-                                    "${walk.distance.toStringAsFixed(2)}", "km",
+                                    walk.distance.toStringAsFixed(2), "km",
                                     const Color(0xFF4CAF50)),
                                 _buildLuxStatItem(
                                     Icons.access_time_rounded, durationText,

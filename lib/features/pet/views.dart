@@ -186,7 +186,7 @@ class PetScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              "나이 : ${age}살",
+                              "나이 : $age살",
                               style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
                             ),
                             const SizedBox(height: 2),
@@ -386,27 +386,6 @@ class _PetRegistrationScreenState extends State<PetRegistrationScreen> {
       lastDate: DateTime.now(),
     );
     if (picked != null) setState(() => _birthDate = picked);
-  }
-
-  void _showDeleteDialog(BuildContext context, PetModel pet) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("삭제"),
-        content: Text("${pet.name} 정보를 삭제하시겠습니까?"),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("취소")),
-          TextButton(
-            onPressed: () {
-              context.read<PetViewModel>().deletePet(pet.id);
-              Navigator.pop(ctx); // 다이얼로그 닫기
-              Navigator.pop(context); // 등록 화면 닫기 (목록으로 이동)
-            },
-            child: const Text("삭제", style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
   }
 
   void _submit() async {
@@ -700,7 +679,7 @@ class _PetRegistrationScreenState extends State<PetRegistrationScreen> {
                         Switch(
                           value: _isNeutered,
                           onChanged: (v) => setState(() => _isNeutered = v),
-                          activeColor: const Color(0xFF4CAF50),
+                          activeThumbColor: const Color(0xFF4CAF50),
                         ),
                       ],
                     ),
