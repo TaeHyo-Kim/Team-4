@@ -208,6 +208,8 @@ class _SocialScreenState extends State<SocialScreen> {
                   return Marker(
                     markerId: MarkerId(user.uid),
                     position: LatLng(pos?.latitude ?? 0.0, pos?.longitude ?? 0.0),
+                    // 해당 유저의 생성된 마커 아이콘 적용, 없으면 기본 마커
+                    icon: vm.nearbyMarkers[user.uid] ?? BitmapDescriptor.defaultMarker,
                     onTap: () {
                       _onInteractionStarted();
                       setState(() => _selectedUser = user);

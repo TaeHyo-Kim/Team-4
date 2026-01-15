@@ -46,7 +46,48 @@ class SocialViewModel with ChangeNotifier {
   BitmapDescriptor? _myProfileIcon;
   BitmapDescriptor? get myProfileIcon => _myProfileIcon; // views.dart에서 접근할 이름
 
-  // [추가] 프로필 이미지를 원형 마커로 변환 (산책 기능 로직 재사용)
+  //  주변 사용자들의 마커 아이콘을 저장할 Map (Key: uid, Value: 마커)
+  Map<String, BitmapDescriptor> _nearbyMarkers = {};
+  Map<String, BitmapDescriptor> get nearbyMarkers => _nearbyMarkers;
+
+  // URL을 원형 마커로 변환하는 공통 로직 (기존 createProfileMarker 로직 활용)
+  Future<BitmapDescriptor?> _generateCircularMarker(String? imageUrl) async {
+    if (imageUrl == null || imageUrl.isEmpty) return null;
+    try {
+      final http.Response response = await http.get(Uri.parse(imageUrl));
+      final ui.Codec codec = await ui.instantiateImageCodec(
+        response.bodyBytes,
+        targetWidth: 120,
+        targetHeight: 120,
+      );
+      final ui.FrameInfo fi = await codec.getNextFrame();
+      final ui.Image image = fi.image;
+
+      final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
+      final Canvas canvas = Canvas(pictureRecorder);
+      final Paint paint = Paint()..isAntiAlias = true;
+      const double radius = 60.0;
+
+      canvas.drawCircle(const Offset(radius, radius), radius, paint);
+      paint.blendMode = BlendMode.srcIn;
+      canvas.drawImage(image, Offset.zero, paint);
+
+      final Paint borderPaint = Paint()
+        ..color = const Color(0xFFFF9800) // 주황색 테두리
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 6;
+      canvas.drawCircle(const Offset(radius, radius), radius, borderPaint);
+
+      final ui.Image finalImage = await pictureRecorder.endRecording().toImage(120, 120);
+      final ByteData? byteData = await finalImage.toByteData(format: ui.ImageByteFormat.png);
+      return BitmapDescriptor.fromBytes(byteData!.buffer.asUint8List());
+    } catch (e) {
+      debugPrint("마커 생성 실패: $e");
+      return null;
+    }
+  }
+
+  // 프로필 이미지를 원형 마커로 변환 (산책 기능 로직 재사용)
   Future<void> createProfileMarker(String? imageUrl) async {
     if (imageUrl == null || imageUrl.isEmpty) return;
 
@@ -263,6 +304,16 @@ class SocialViewModel with ChangeNotifier {
         );
         return distance <= 1000; // 1km 이내
       }).toList();
+
+      //  새로 발견된 주변 사용자의 프로필 마커 생성
+      for (var user in _nearbyUsers) {
+        if (!_nearbyMarkers.containsKey(user.uid) && user.profileImageUrl != null) {
+          final markerIcon = await _generateCircularMarker(user.profileImageUrl);
+          if (markerIcon != null) {
+            _nearbyMarkers[user.uid] = markerIcon;
+          }
+        }
+      }
 
       notifyListeners();
     } catch (e) {
