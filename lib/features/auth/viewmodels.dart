@@ -81,12 +81,16 @@ class AuthViewModel with ChangeNotifier {
     notifyListeners();
     try {
       await _auth.signInWithEmailAndPassword(email: email, password: password);
+      debugPrint("로그인 성공");
     } on FirebaseAuthException catch (e) {
       _errorMessage = _parseFirebaseError(e);
     } catch (e) {
       _errorMessage = '로그인 중 오류가 발생했습니다.';
     } finally {
       _isLoading = false;
+      if (errorMessage == null) {
+        // 로그인 성공 시 로딩 상태 해제 후 알림
+      }
       notifyListeners();
     }
   }
@@ -181,11 +185,15 @@ class AuthViewModel with ChangeNotifier {
     if (user == null) return;
 
     _isLoading = true;
+    _errorMessage = null; // 시작 전 에러 초기화
     notifyListeners();
 
     try {
       final uid = user.uid;
       final batch = _db.batch();
+      // 1. 계정 삭제 시도 (보안 민감 작업이므로 먼저 수행)
+      // 여기서 'requires-recent-login' 에러가 나면 아래 Firestore 삭제를 실행하지 않음
+      await user.delete();
 
       final walks = await _db.collection('walks').where('userId', isEqualTo: uid).get();
       for (var doc in walks.docs) { batch.delete(doc.reference); }
@@ -204,9 +212,13 @@ class AuthViewModel with ChangeNotifier {
 
       await batch.commit();
       await user.delete();
-      
+      await logout();
+
       _userModel = null;
       _userSub?.cancel();
+      _errorMessage = null; // 성공했으므로 에러 없음
+      debugPrint("회원 탈퇴 및 세션 정리 완료");
+
     } on FirebaseAuthException catch (e) {
       _errorMessage = _parseFirebaseError(e);
       if (e.code == 'requires-recent-login') {

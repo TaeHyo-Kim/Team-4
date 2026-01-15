@@ -588,65 +588,48 @@ class AccountManagementScreen extends StatelessWidget {
   void _showDeleteAccountDialog(BuildContext context, AuthViewModel authVM) {
     showDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: const Color(0xFFFFF9F9), 
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
+      barrierDismissible: !authVM.isLoading, // 로딩 중에는 창 닫기 방지
+      builder: (ctx) => Consumer<AuthViewModel>( // 내부 상태 감시를 위해 Consumer 사용
+        builder: (context, vm, child) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text("회원 탈퇴"),
+          content: vm.isLoading
+              ? const Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.warning_amber_rounded, size: 48, color: Colors.redAccent),
-              const SizedBox(height: 16),
-              const Text("회원 탈퇴", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              const Text(
-                "정말 탈퇴하시겠습니까?\n모든 데이터가 삭제되며 복구할 수 없습니다.",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.black87),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text("취소", style: TextStyle(color: Colors.grey)),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        await authVM.deleteAccount();
-                        if (!ctx.mounted) return;
-                        
-                        if (authVM.errorMessage != null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(authVM.errorMessage!), backgroundColor: Colors.redAccent),
-                          );
-                          Navigator.pop(ctx);
-                        } else {
-                          Navigator.pop(ctx);
-                          Navigator.of(context).pushAndRemoveUntil(
-                            MaterialPageRoute(builder: (_) => const LoginScreen()),
-                            (route) => false,
-                          );
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.redAccent,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: authVM.isLoading 
-                        ? const AppLoadingIndicator(color: Colors.white, size: 18)
-                        : const Text("탈퇴하기", style: TextStyle(color: Colors.white)),
-                    ),
-                  ),
-                ],
-              ),
+              AppLoadingIndicator(),
+              SizedBox(height: 16),
+              Text("계정 정보를 삭제 중입니다..."),
             ],
-          ),
+          )
+              : const Text("정말 탈퇴하시겠습니까?\n모든 데이터가 삭제되며 복구할 수 없습니다."),
+          actions: vm.isLoading ? [] : [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("취소", style: TextStyle(color: Colors.grey)),
+            ),
+            TextButton(
+              onPressed: () async {
+                await vm.deleteAccount();
+                if (!context.mounted) return;
+
+                if (vm.errorMessage != null) {
+                  // 재인증 필요 등 에러 발생 시
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(vm.errorMessage!), backgroundColor: Colors.redAccent),
+                  );
+                  Navigator.pop(ctx);
+                } else {
+                  // 탈퇴 성공 시: 로그인 화면으로 보내고 스택 제거
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                        (route) => false,
+                  );
+                }
+              },
+              child: const Text("탈퇴하기", style: TextStyle(color: Colors.redAccent)),
+            ),
+          ],
         ),
       ),
     );
