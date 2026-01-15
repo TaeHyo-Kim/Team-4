@@ -87,45 +87,61 @@ class SocialViewModel with ChangeNotifier {
     }
   }
 
+  String? _currentMarkerUrl; // 현재 마커로 생성된 이미지의 URL 저장용
+  String? get currentMarkerUrl => _currentMarkerUrl; // 뷰에서 비교하기 위한 getter
+
   // 프로필 이미지를 원형 마커로 변환 (산책 기능 로직 재사용)
   Future<void> createProfileMarker(String? imageUrl) async {
-    if (imageUrl == null || imageUrl.isEmpty) return;
+    if (imageUrl == _currentMarkerUrl && _myProfileIcon != null) return;
 
+    _currentMarkerUrl = imageUrl;
+
+    // 2. 이미지가 없는 경우 기본 마커 생성
+    if (imageUrl == null || imageUrl.isEmpty) {
+      _myProfileIcon = await _generateDefaultCircularMarker();
+      notifyListeners();
+      return;
+    }
+
+    // 3. 이미지가 있는 경우 원형 마커 생성
     try {
-      final http.Response response = await http.get(Uri.parse(imageUrl));
-      final ui.Codec codec = await ui.instantiateImageCodec(
-        response.bodyBytes,
-        targetWidth: 150, // 마커 크기
-        targetHeight: 150,
-      );
-      final ui.FrameInfo fi = await codec.getNextFrame();
-      final ui.Image image = fi.image;
-
-      final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
-      final Canvas canvas = Canvas(pictureRecorder);
-      final Paint paint = Paint()..isAntiAlias = true;
-      final double radius = 75.0;
-
-      // 원형 절삭
-      canvas.drawCircle(Offset(radius, radius), radius, paint);
-      paint.blendMode = BlendMode.srcIn;
-      canvas.drawImage(image, Offset.zero, paint);
-
-      // 테두리 추가
-      final Paint borderPaint = Paint()
-        ..color = const Color(0xFFFF9800)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 6;
-      canvas.drawCircle(Offset(radius, radius), radius, borderPaint);
-
-      final ui.Image finalImage = await pictureRecorder.endRecording().toImage(150, 150);
-      final ByteData? byteData = await finalImage.toByteData(format: ui.ImageByteFormat.png);
-
-      _myProfileIcon = BitmapDescriptor.fromBytes(byteData!.buffer.asUint8List());
+      final marker = await _generateCircularMarker(imageUrl);
+      if (marker != null) {
+        _myProfileIcon = marker;
+      } else {
+        // 다운로드 실패 시 기본 마커로 대체
+        _myProfileIcon = await _generateDefaultCircularMarker();
+      }
       notifyListeners();
     } catch (e) {
-      debugPrint("소셜 마커 생성 실패: $e");
+      debugPrint("마커 갱신 오류: $e");
+      _myProfileIcon = await _generateDefaultCircularMarker();
+      notifyListeners();
     }
+  }
+
+  // [추가] 프로필 사진이 없는 사용자를 위한 기본 원형 마커 생성
+  Future<BitmapDescriptor> _generateDefaultCircularMarker() async {
+    final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
+    final Canvas canvas = Canvas(pictureRecorder);
+    final Paint paint = Paint()..color = Colors.grey[300]!..isAntiAlias = true;
+    const double radius = 60.0;
+
+    // 배경 원형 (회색)
+    canvas.drawCircle(const Offset(radius, radius), radius, paint);
+
+    // 테두리 (주황색)
+    final Paint borderPaint = Paint()
+      ..color = const Color(0xFFFF9800)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 6;
+    canvas.drawCircle(const Offset(radius, radius), radius, borderPaint);
+
+    // [선택] 사람 아이콘이나 텍스트를 추가로 그려넣을 수 있습니다.
+
+    final ui.Image finalImage = await pictureRecorder.endRecording().toImage(120, 120);
+    final ByteData? byteData = await finalImage.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.fromBytes(byteData!.buffer.asUint8List());
   }
 
   // [추가] 내 프로필 이미지를 마커용 비트맵으로 변환
@@ -295,7 +311,8 @@ class SocialViewModel with ChangeNotifier {
       Position myPos = await Geolocator.getCurrentPosition();
 
       _nearbyUsers = _allUsers.where((user) {
-        if (user.position == null || user.uid == _auth.currentUser?.uid) return false;
+        if (user.uid == _auth.currentUser?.uid) return false;
+        if (user.position == null) return false;
 
         // [해결] GeoPoint.latitude에 직접 접근
         double distance = Geolocator.distanceBetween(
@@ -307,10 +324,13 @@ class SocialViewModel with ChangeNotifier {
 
       //  새로 발견된 주변 사용자의 프로필 마커 생성
       for (var user in _nearbyUsers) {
-        if (!_nearbyMarkers.containsKey(user.uid) && user.profileImageUrl != null) {
-          final markerIcon = await _generateCircularMarker(user.profileImageUrl);
-          if (markerIcon != null) {
-            _nearbyMarkers[user.uid] = markerIcon;
+        if (!_nearbyMarkers.containsKey(user.uid)) {
+          if (user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty) {
+            final markerIcon = await _generateCircularMarker(user.profileImageUrl);
+            _nearbyMarkers[user.uid] = markerIcon ?? await _generateDefaultCircularMarker();
+          } else {
+            // 사진 없는 유저 처리
+            _nearbyMarkers[user.uid] = await _generateDefaultCircularMarker();
           }
         }
       }

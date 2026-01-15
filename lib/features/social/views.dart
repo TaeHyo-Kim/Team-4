@@ -110,9 +110,16 @@ class _SocialScreenState extends State<SocialScreen> {
 
     bool isListMode = _isSearchBarFocused || _searchCtrl.text.isNotEmpty;
     final socialVM = context.watch<SocialViewModel>();
+    final authVM = context.watch<AuthViewModel>(); // AuthViewModel 감시 추가
     // 검색 중이거나 검색창에 포커스가 있는 경우 리스트 모드
-    bool showListMode = _isFocused || _searchCtrl.text.isNotEmpty;
-    bool showMap = !_isSearchBarFocused && _searchCtrl.text.isEmpty;
+    // [추가] 프로필 사진 변경 감지 및 자동 갱신 트리거
+    // Auth의 사진 URL과 Social의 마커 생성용 URL이 다르면 갱신 실행
+    final currentPhotoUrl = authVM.userModel?.profileImageUrl;
+    if (currentPhotoUrl != socialVM.currentMarkerUrl) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        socialVM.createProfileMarker(currentPhotoUrl);
+      });
+    }
 
     return Scaffold(
       backgroundColor: Colors.white,
